@@ -8,7 +8,146 @@
     let nasFabHost = null;
     let nasFabButton = null;
     let nasFabBadge = null;
+    let nasPanel = null;
+    const nasVideos = new Map();
     const nasIsTopFrame = window.top === window;
+
+    function toggleNasPanel() {
+        if (nasPanel) {
+            nasPanel.remove();
+            nasPanel = null;
+            return;
+        }
+
+        nasPanel = document.createElement("div");
+        nasPanel.style.position = "fixed";
+        nasPanel.style.left = "12px";
+        nasPanel.style.right = "12px";
+        nasPanel.style.bottom = "150px";
+        nasPanel.style.maxHeight = "65vh";
+        nasPanel.style.overflowY = "auto";
+        nasPanel.style.background = "#111";
+        nasPanel.style.color = "white";
+        nasPanel.style.borderRadius = "16px";
+        nasPanel.style.zIndex = "2147483647";
+        nasPanel.style.fontFamily = "sans-serif";
+        nasPanel.style.boxShadow = "0 4px 24px rgba(0,0,0,.55)";
+
+        document.documentElement.appendChild(nasPanel);
+
+        renderNasPanel();
+    }
+
+    function renderNasPanel() {
+        if (!nasPanel) {
+            return;
+        }
+
+        nasPanel.innerHTML = "";
+
+        const header = document.createElement("div");
+        header.style.position = "sticky";
+        header.style.top = "0";
+        header.style.zIndex = "2";
+        header.style.background = "#111";
+        header.style.padding = "12px";
+        header.style.display = "flex";
+        header.style.justifyContent = "space-between";
+        header.style.alignItems = "center";
+
+        const heading = document.createElement("div");
+        heading.textContent = "Vidéos détectées";
+        heading.style.fontSize = "18px";
+        heading.style.fontWeight = "bold";
+
+        const send = document.createElement("button");
+        send.textContent = "SEND " + nasVideos.size;
+        send.style.border = "0";
+        send.style.borderRadius = "10px";
+        send.style.padding = "9px 14px";
+        send.style.fontWeight = "bold";
+        send.style.fontSize = "14px";
+
+        header.appendChild(heading);
+        header.appendChild(send);
+        nasPanel.appendChild(header);
+
+        for (const [key, video] of nasVideos) {
+            nasPanel.appendChild(createNasVideoCard(key, video));
+        }
+    }
+
+    function createNasVideoCard(key, video) {
+        const card = document.createElement("div");
+        card.style.margin = "0 12px 12px";
+        card.style.padding = "12px";
+        card.style.background = "#222";
+        card.style.borderRadius = "12px";
+
+        const titleLine = document.createElement("div");
+        titleLine.style.display = "flex";
+        titleLine.style.alignItems = "center";
+        titleLine.style.gap = "8px";
+        titleLine.style.marginBottom = "5px";
+
+        const title = document.createElement("div");
+        title.textContent = video.title;
+        title.style.fontWeight = "bold";
+        title.style.flex = "1";
+
+        const badge = document.createElement("span");
+        badge.textContent = video.type;
+        badge.style.fontSize = "11px";
+        badge.style.padding = "3px 7px";
+        badge.style.borderRadius = "8px";
+        badge.style.background = "#444";
+
+        titleLine.appendChild(title);
+        titleLine.appendChild(badge);
+        card.appendChild(titleLine);
+
+        video.variants.forEach((variant, index) => {
+            const label = document.createElement("label");
+            label.style.display = "flex";
+            label.style.alignItems = "center";
+            label.style.gap = "6px";
+            label.style.padding = "3px 2px";
+            label.style.color = "white";
+            label.style.lineHeight = "1.2";
+
+            const radio = document.createElement("input");
+            radio.style.margin = "0";
+            radio.type = "radio";
+            radio.name = "nas-video-" + key;
+            radio.checked = video.selected === index;
+
+            radio.addEventListener("change", function () {
+                video.selected = index;
+            });
+
+            const resolution = document.createElement("span");
+            resolution.style.color = "white";
+            resolution.style.fontSize = "14px";
+
+            let text = variant.resolution || "?";
+
+            if (variant.resolution && variant.resolution.includes("x")) {
+                text = variant.resolution.split("x")[1] + "p";
+            }
+
+            if (variant.bandwidth) {
+                text += "  •  " + (variant.bandwidth / 1000000).toFixed(1) + " Mb/s";
+            }
+
+            resolution.textContent = text;
+
+            label.appendChild(radio);
+            label.appendChild(resolution);
+            card.appendChild(label);
+        });
+
+        return card;
+    }
 
     function createNasFab() {
         if (nasFabHost) return;
@@ -79,7 +218,7 @@
         nasFabBadge = shadow.querySelector(".badge");
 
         nasFabButton.addEventListener("click", () => {
-            console.log("Cat Catch NAS media:", Array.from(nasMedia.values()));
+            toggleNasPanel();
         });
 
         document.documentElement.appendChild(nasFabHost);
@@ -177,6 +316,34 @@
             sendResponse({ count: 0 });
             return true;
         }
+
+        if (Message.Message === "nasHlsVariants") {
+            nasVideos.set(Message.masterUrl, {
+                title: Message.title || "Vidéo",
+                type: "HLS",
+                masterUrl: Message.masterUrl,
+                variants: Message.variants || [],
+                selected: 0
+            });
+
+            updateNasFabCount();
+
+            if (nasPanel) {
+                renderNasPanel();
+            }
+
+            sendResponse("ok");
+            return true;
+        }
+
+        function updateNasFabCount() {
+            const count = nasVideos.size || nasMedia.size;
+
+            if (nasFabBadge) {
+                nasFabBadge.textContent = count;
+            }
+        }
+
         // 速度控制
         if (Message.Message == "speed") {
             if (_videoObj[Message.index]?.playbackRate !== undefined) {
@@ -294,6 +461,7 @@
             sendResponse("ok");
             return true;
         }
+
         if (Message.Message == "getPage") {
             if (Message.find) {
                 const DOM = document.querySelector(Message.find);
@@ -303,6 +471,7 @@
             sendResponse(document.documentElement.outerHTML);
             return true;
         }
+
         if (Message.Message == "getM3u8Text") {
             if (Message.url && m3u8Text.has(Message.url)) {
                 sendResponse(m3u8Text.get(Message.url));
@@ -311,6 +480,7 @@
             sendResponse("");
             return true;
         }
+
         if (Message.Message == "getM3u8Cache") {
             fetch(Message.url, { method: "GET", cache: "force-cache" })
                 .then(response => response.text())

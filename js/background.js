@@ -17,6 +17,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(function () {
     return;
 });
 chrome.runtime.onConnect.addListener(function (Port) {
+    Port.onDisconnect = undefined;
     if (chrome.runtime.lastError || Port.name !== "HeartBeat") return;
     Port.postMessage("HeartBeat");
     Port.onMessage.addListener(function (message, Port) {
@@ -61,6 +62,84 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
         return;
     }
 });
+
+async function nasParseMaster(info) {
+    try {
+        const headers = {};
+
+        if (info.requestHeaders) {
+            for (const [key, value] of Object.entries(info.requestHeaders)) {
+                if (value != null) {
+                    headers[key] = value;
+                }
+            }
+        }
+
+        const response = await fetch(info.url, {
+            method: "GET",
+            headers: headers,
+            credentials: "include"
+        });
+
+        if (!response.ok) {
+            return;
+        }
+
+        const text = await response.text();
+        const lines = text.split(/\r?\n/);
+
+        const variants = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+
+            if (!line.startsWith("#EXT-X-STREAM-INF:")) {
+                continue;
+            }
+
+            const resolution = line.match(/RESOLUTION=(\d+x\d+)/i)?.[1] || "?";
+            const bandwidth = line.match(/BANDWIDTH=(\d+)/i)?.[1];
+
+            let url = "";
+
+            for (let j = i + 1; j < lines.length; j++) {
+                const candidate = lines[j].trim();
+
+                if (!candidate || candidate.startsWith("#")) {
+                    continue;
+                }
+
+                url = new URL(candidate, info.url).href;
+                break;
+            }
+
+            if (url) {
+                variants.push({
+                    resolution: resolution,
+                    bandwidth: bandwidth ? Number(bandwidth) : null,
+                    url: url
+                });
+            }
+        }
+
+        chrome.tabs.sendMessage(
+            info.tabId,
+            {
+                Message: "nasHlsVariants",
+                title: info.title,
+                masterUrl: info.url,
+                variants: variants
+            },
+            { frameId: 0 },
+            () => {
+                void chrome.runtime.lastError;
+            }
+        );
+
+    } catch (e) {
+        console.log("NAS master parse error", e);
+    }
+}
 
 // onBeforeRequest 浏览器发送请求之前使用正则匹配发送请求的URL
 // chrome.webRequest.onBeforeRequest.addListener(
@@ -316,8 +395,20 @@ function findMedia(data, isRegex = false, filter = false, timer = false) {
         }
 
         const nasExt = String(info.ext ?? "").toLowerCase();
+        const nasType = String(info.type ?? "").toLowerCase();
+        const nasUrl = String(info.url ?? "").toLowerCase();
 
-        //if (["mp4", "m3u8", "m3u"].includes(nasExt)) {
+        const nasIsVideo =
+            nasExt === "mp4" ||
+            nasExt === "m3u8" ||
+            nasExt === "m3u" ||
+            nasExt.includes("mpegurl") ||
+            nasType === "video/mp4" ||
+            nasType.includes("mpegurl") ||
+            /\.mp4(?:$|[?#])/.test(nasUrl) ||
+            /\.m3u8?(?:$|[?#])/.test(nasUrl);
+
+        if (nasIsVideo) {
             const result = chrome.tabs.sendMessage(
                 info.tabId,
                 {
@@ -336,7 +427,11 @@ function findMedia(data, isRegex = false, filter = false, timer = false) {
                     void chrome.runtime.lastError;
                 }
             );
-        //}
+
+            if (nasUrl.includes("master.m3u8")) {
+                nasParseMaster(info);
+            }
+        }
 
         // 发送到popup 并检查自动下载
         chrome.runtime.sendMessage({Message: "popupAddData", data: info}, function () {
