@@ -1,0 +1,15 @@
+#!/bin/bash
+set -e
+
+EDGE="/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+PROJECT="$(cd "$(dirname "$0")" && pwd)"
+KEY="$(dirname "$PROJECT")/cat-catch.pem"
+CRX="$(dirname "$PROJECT")/cat-catch.crx"
+OUT="/Volumes/Download/catcatch"
+
+"$EDGE" --pack-extension="$PROJECT" --pack-extension-key="$KEY" --no-message-box
+
+mkdir -p "$OUT"
+cp "$CRX" "$OUT/catcatch-nas.bin"
+
+echo "Build copié vers $OUT/catcatch-nas.bin"

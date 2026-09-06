@@ -3,8 +3,131 @@
     var _videoSrc = [];
     var _key = new Set();
     var m3u8Text = new Map();
+
+    const nasMedia = new Map();
+    let nasFabHost = null;
+    let nasFabButton = null;
+    let nasFabBadge = null;
+    const nasIsTopFrame = window.top === window;
+
+    function createNasFab() {
+        if (nasFabHost) return;
+
+        nasFabHost = document.createElement("div");
+        nasFabHost.id = "catcatch-nas-fab-host";
+
+        Object.assign(nasFabHost.style, {
+            position: "fixed",
+            right: "18px",
+            bottom: "90px",
+            zIndex: "2147483647",
+            display: "none"
+        });
+
+        const shadow = nasFabHost.attachShadow({ mode: "open" });
+
+        shadow.innerHTML = `
+            <style>
+                button {
+                    all: initial;
+                    box-sizing: border-box;
+                    width: 58px;
+                    height: 58px;
+                    border-radius: 50%;
+                    background: #222;
+                    color: white;
+                    font-family: system-ui, sans-serif;
+                    font-size: 27px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    box-shadow: 0 3px 12px rgba(0,0,0,.45);
+                    position: relative;
+                    user-select: none;
+                }
+
+                button:active {
+                    transform: scale(.94);
+                }
+
+                .badge {
+                    position: absolute;
+                    top: -4px;
+                    right: -4px;
+                    min-width: 20px;
+                    height: 20px;
+                    padding: 0 4px;
+                    border-radius: 10px;
+                    background: #d32f2f;
+                    color: white;
+                    font-size: 12px;
+                    font-family: system-ui, sans-serif;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+            </style>
+
+            <button type="button" title="Vidéos détectées">
+                🎬
+                <span class="badge">1</span>
+            </button>
+        `;
+
+        nasFabButton = shadow.querySelector("button");
+        nasFabBadge = shadow.querySelector(".badge");
+
+        nasFabButton.addEventListener("click", () => {
+            console.log("Cat Catch NAS media:", Array.from(nasMedia.values()));
+        });
+
+        document.documentElement.appendChild(nasFabHost);
+    }
+
+    function prepareNasFab() {
+        if (document.documentElement) {
+            createNasFab();
+            return;
+        }
+
+        const observer = new MutationObserver(() => {
+            if (!document.documentElement) return;
+            observer.disconnect();
+            createNasFab();
+        });
+
+        observer.observe(document, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    function showNasFab(media) {
+        createNasFab();
+
+        const key = media.requestId || media.url;
+        nasMedia.set(key, media);
+
+        nasFabBadge.textContent = nasMedia.size;
+        nasFabHost.style.display = "block";
+    }
+
+    if (nasIsTopFrame) {
+        prepareNasFab();
+    }
+
     chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         if (chrome.runtime.lastError) { return; }
+
+        if (Message.Message === "nasVideoDetected") {
+            if (nasIsTopFrame) {
+                showNasFab(Message.media);
+            }
+            sendResponse("ok");
+            return true;
+        }
+
         // 获取页面视频对象
         if (Message.Message == "getVideoState") {
             let videoObj = [];
