@@ -67,6 +67,77 @@
         send.style.padding = "9px 14px";
         send.style.fontWeight = "bold";
         send.style.fontSize = "14px";
+        send.style.cursor = "pointer";
+
+        send.addEventListener("click", async function () {
+            if (send.disabled) {
+                return;
+            }
+
+            send.disabled = true;
+            send.textContent = "ENVOI…";
+
+            let success = 0;
+            let errors = 0;
+
+            const promises = [];
+
+            for (const video of nasVideos.values()) {
+                const variant = video.variants[video.selected];
+
+                if (!variant) {
+                    continue;
+                }
+
+                promises.push(
+                    new Promise(function (resolve) {
+                        chrome.runtime.sendMessage(
+                            {
+                                Message: "nasSendToServer",
+                                data: {
+                                    url: variant.url,
+                                    referer: video.referer || "",
+                                    cookie: video.cookie || "",
+                                    userAgent: navigator.userAgent,
+                                    title: video.title || "Vidéo",
+                                    filename: video.title || "video"
+                                }
+                            },
+                            function (response) {
+                                if (chrome.runtime.lastError || !response?.ok) {
+                                    errors++;
+                                } else {
+                                    success++;
+                                }
+
+                                resolve();
+                            }
+                        );
+                    })
+                );
+            }
+
+            await Promise.all(promises);
+
+            if (errors === 0 && success > 0) {
+                send.textContent = "✓ ENVOYÉ " + success;
+
+                setTimeout(function () {
+                    if (nasPanel) {
+                        nasPanel.remove();
+                        nasPanel = null;
+                    }
+                }, 500);
+
+            } else if (success > 0) {
+                send.textContent = "✓ " + success + " / ✕ " + errors;
+                send.disabled = false;
+
+            } else {
+                send.textContent = "✕ ERREUR";
+                send.disabled = false;
+            }
+        });
 
         header.appendChild(heading);
         header.appendChild(send);
@@ -217,7 +288,41 @@
         nasFabButton = shadow.querySelector("button");
         nasFabBadge = shadow.querySelector(".badge");
 
-        nasFabButton.addEventListener("click", () => {
+        let nasLongPressTimer = null;
+        let nasLongPressTriggered = false;
+
+        nasFabButton.addEventListener("pointerdown", function () {
+            nasLongPressTriggered = false;
+
+            nasLongPressTimer = setTimeout(function () {
+                nasLongPressTriggered = true;
+
+                chrome.runtime.sendMessage({
+                    Message: "nasOpenStatus"
+                });
+            }, 700);
+        });
+
+        nasFabButton.addEventListener("pointerup", function () {
+            clearTimeout(nasLongPressTimer);
+        });
+
+        nasFabButton.addEventListener("pointercancel", function () {
+            clearTimeout(nasLongPressTimer);
+        });
+
+        nasFabButton.addEventListener("pointerleave", function () {
+            clearTimeout(nasLongPressTimer);
+        });
+
+        nasFabButton.addEventListener("click", function (event) {
+            if (nasLongPressTriggered) {
+                event.preventDefault();
+                event.stopPropagation();
+                nasLongPressTriggered = false;
+                return;
+            }
+
             toggleNasPanel();
         });
 
@@ -323,7 +428,9 @@
                 type: "HLS",
                 masterUrl: Message.masterUrl,
                 variants: Message.variants || [],
-                selected: 0
+                selected: 0,
+                referer: Message.referer || "",
+                cookie: Message.cookie || ""
             });
 
             updateNasFabCount();

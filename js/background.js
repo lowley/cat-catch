@@ -128,7 +128,9 @@ async function nasParseMaster(info) {
                 Message: "nasHlsVariants",
                 title: info.title,
                 masterUrl: info.url,
-                variants: variants
+                variants: variants,
+                referer: info.requestHeaders?.referer || info.initiator || info.webUrl || "",
+                cookie: info.cookie || ""
             },
             { frameId: 0 },
             () => {
@@ -521,6 +523,41 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
     }
     // 以下检查是否有 tabId 不存在使用当前标签
     Message.tabId = Message.tabId ?? G.tabId;
+
+    if (Message.Message === "nasSendToServer") {
+        fetch("http://10.0.0.1:9876/download", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(Message.data)
+        })
+            .then(async response => {
+                const text = await response.text();
+                sendResponse({
+                    ok: response.ok,
+                    status: response.status,
+                    text: text
+                });
+            })
+            .catch(error => {
+                sendResponse({
+                    ok: false,
+                    error: String(error)
+                });
+            });
+
+        return true;
+    }
+
+    if (Message.Message === "nasOpenStatus") {
+        chrome.tabs.create({
+            url: "http://10.0.0.1:9876/status",
+            active: true
+        });
+        sendResponse("ok");
+        return true;
+    }
 
     // 从缓存中保存数据到本地
     if (Message.Message == "pushData") {
