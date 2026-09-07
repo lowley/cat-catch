@@ -13,9 +13,24 @@ if (typeof G === 'undefined') {
 chrome.webNavigation.onBeforeNavigate.addListener(function () {
     return;
 });
-chrome.webNavigation.onHistoryStateUpdated.addListener(function () {
-    return;
+
+chrome.webNavigation.onHistoryStateUpdated.addListener(function (details) {
+    if (details.frameId !== 0 || details.tabId <= 0) {
+        return;
+    }
+
+    chrome.tabs.sendMessage(
+        details.tabId,
+        {
+            Message: "nasResetPage"
+        },
+        { frameId: 0 },
+        () => {
+            void chrome.runtime.lastError;
+        }
+    );
 });
+
 chrome.runtime.onConnect.addListener(function (Port) {
     Port.onDisconnect = undefined;
     if (chrome.runtime.lastError || Port.name !== "HeartBeat") return;
@@ -99,6 +114,7 @@ async function nasParseMaster(info) {
 
             const resolution = line.match(/RESOLUTION=(\d+x\d+)/i)?.[1] || "?";
             const bandwidth = line.match(/BANDWIDTH=(\d+)/i)?.[1];
+            const averageBandwidth = line.match(/AVERAGE-BANDWIDTH=(\d+)/i)?.[1];
 
             let url = "";
 
@@ -117,8 +133,47 @@ async function nasParseMaster(info) {
                 variants.push({
                     resolution: resolution,
                     bandwidth: bandwidth ? Number(bandwidth) : null,
+                    averageBandwidth: averageBandwidth ? Number(averageBandwidth) : null,
                     url: url
                 });
+            }
+        }
+
+        let duration = null;
+
+        if (variants.length > 0) {
+            try {
+                const variantResponse = await fetch(variants[0].url, {
+                    method: "GET",
+                    headers: headers,
+                    credentials: "include"
+                });
+
+                if (variantResponse.ok) {
+                    const variantText = await variantResponse.text();
+
+                    duration = 0;
+
+                    for (const match of variantText.matchAll(/#EXTINF:([\d.]+)/g)) {
+                        duration += Number(match[1]);
+                    }
+
+                    if (!duration) {
+                        duration = null;
+                    }
+                }
+            } catch (e) {
+                duration = null;
+            }
+        }
+
+        if (duration) {
+            for (const variant of variants) {
+                const bitrate = variant.averageBandwidth || variant.bandwidth;
+
+                if (bitrate) {
+                    variant.estimatedSize = duration * bitrate / 8;
+                }
             }
         }
 
@@ -129,8 +184,9 @@ async function nasParseMaster(info) {
                 title: info.title,
                 masterUrl: info.url,
                 variants: variants,
+                duration: duration,
                 referer: info.requestHeaders?.referer || info.initiator || info.webUrl || "",
-                cookie: info.cookie || ""
+                cookie: info.cookie || "",
             },
             { frameId: 0 },
             () => {
@@ -551,10 +607,76 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
     }
 
     if (Message.Message === "nasOpenStatus") {
+        const originTabId = sender.tab?.id;
+        const originUrl = sender.tab?.url || "";
+
         chrome.tabs.create({
             url: "http://10.0.0.1:9876/status",
-            active: true
+            active: true,
+            openerTabId: originTabId
+        }, function (statusTab) {
+            if (statusTab?.id && originTabId) {
+                const key = "nasStatusOrigin_" + statusTab.id;
+
+                chrome.storage.session.set({
+                    [key]: {
+                        tabId: originTabId,
+                        url: originUrl
+                    }
+                });
+            }
         });
+
+        sendResponse("ok");
+        return true;
+    }
+
+    if (Message.Message === "nasCloseStatus") {
+        const statusTabId = sender.tab?.id;
+
+        if (!statusTabId) {
+            sendResponse("error");
+            return true;
+        }
+
+        const key = "nasStatusOrigin_" + statusTabId;
+
+        chrome.storage.session.get(key, function (data) {
+            const origin = data[key];
+
+            if (!origin) {
+                chrome.tabs.remove(statusTabId);
+                return;
+            }
+
+            chrome.tabs.get(origin.tabId, function (tab) {
+                if (!chrome.runtime.lastError && tab) {
+                    chrome.tabs.update(origin.tabId, { active: true });
+
+                    if (tab.windowId !== undefined) {
+                        chrome.windows.update(tab.windowId, { focused: true });
+                    }
+
+                    chrome.tabs.remove(statusTabId);
+                    chrome.storage.session.remove(key);
+                    return;
+                }
+
+                if (origin.url) {
+                    chrome.tabs.create({
+                        url: origin.url,
+                        active: true
+                    }, function () {
+                        chrome.tabs.remove(statusTabId);
+                        chrome.storage.session.remove(key);
+                    });
+                } else {
+                    chrome.tabs.remove(statusTabId);
+                    chrome.storage.session.remove(key);
+                }
+            });
+        });
+
         sendResponse("ok");
         return true;
     }

@@ -11,6 +11,56 @@
     let nasPanel = null;
     const nasVideos = new Map();
     const nasIsTopFrame = window.top === window;
+    const nasIsStatusPage =
+        location.hostname === "10.0.0.1" &&
+        location.port === "9876" &&
+        location.pathname.startsWith("/status");
+
+    function createNasStatusBackButton() {
+        if (document.getElementById("catcatch-nas-status-back")) {
+            return;
+        }
+
+        const button = document.createElement("button");
+        button.id = "catcatch-nas-status-back";
+        button.textContent = "←";
+        button.title = "Retour à la page vidéo";
+
+        Object.assign(button.style, {
+            position: "fixed",
+            top: "14px",
+            right: "14px",
+            width: "46px",
+            height: "46px",
+            border: "0",
+            borderRadius: "50%",
+            background: "#222",
+            color: "white",
+            fontSize: "28px",
+            lineHeight: "46px",
+            textAlign: "center",
+            zIndex: "2147483647",
+            boxShadow: "0 3px 12px rgba(0,0,0,.45)",
+            cursor: "pointer"
+        });
+
+        button.addEventListener("click", function () {
+            chrome.runtime.sendMessage({
+                Message: "nasCloseStatus"
+            });
+        });
+
+        document.documentElement.appendChild(button);
+    }
+
+    if (nasIsTopFrame) {
+        if (nasIsStatusPage) {
+            createNasStatusBackButton();
+        } else {
+            prepareNasFab();
+        }
+    }
+
 
     function toggleNasPanel() {
         if (nasPanel) {
@@ -148,6 +198,39 @@
         }
     }
 
+    function nasFormatDuration(seconds) {
+        if (!seconds) return "";
+
+        seconds = Math.round(seconds);
+
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+
+        if (h > 0) {
+            return String(h).padStart(2, "0") + ":" +
+                String(m).padStart(2, "0") + ":" +
+                String(s).padStart(2, "0");
+        }
+
+        return String(m).padStart(2, "0") + ":" +
+            String(s).padStart(2, "0");
+    }
+
+    function nasFormatSize(bytes) {
+        if (!bytes) return "";
+
+        if (bytes >= 1073741824) {
+            return (bytes / 1073741824).toFixed(1) + " Go";
+        }
+
+        if (bytes >= 1048576) {
+            return Math.round(bytes / 1048576) + " Mo";
+        }
+
+        return Math.round(bytes / 1024) + " Ko";
+    }
+
     function createNasVideoCard(key, video) {
         const card = document.createElement("div");
         card.style.margin = "0 12px 12px";
@@ -162,7 +245,7 @@
         titleLine.style.marginBottom = "5px";
 
         const title = document.createElement("div");
-        title.textContent = video.title;
+        title.textContent = video.title + (video.duration ? "   •   " + nasFormatDuration(video.duration) : "");
         title.style.fontWeight = "bold";
         title.style.flex = "1";
 
@@ -206,8 +289,14 @@
                 text = variant.resolution.split("x")[1] + "p";
             }
 
-            if (variant.bandwidth) {
-                text += "  •  " + (variant.bandwidth / 1000000).toFixed(1) + " Mb/s";
+            const bitrate = variant.averageBandwidth || variant.bandwidth;
+
+            if (bitrate) {
+                text += "  •  " + (bitrate / 1000000).toFixed(1) + " Mb/s";
+            }
+
+            if (variant.estimatedSize) {
+                text += "  •  ~" + nasFormatSize(variant.estimatedSize);
             }
 
             resolution.textContent = text;
@@ -347,6 +436,24 @@
         });
     }
 
+    function resetNasPage() {
+        nasMedia.clear();
+        nasVideos.clear();
+
+        if (nasPanel) {
+            nasPanel.remove();
+            nasPanel = null;
+        }
+
+        if (nasFabHost) {
+            nasFabHost.style.display = "none";
+        }
+
+        if (nasFabBadge) {
+            nasFabBadge.textContent = "0";
+        }
+    }
+
     function showNasFab(media) {
         createNasFab();
 
@@ -357,10 +464,6 @@
         nasFabHost.style.display = "block";
     }
 
-    if (nasIsTopFrame) {
-        prepareNasFab();
-    }
-
     chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         if (chrome.runtime.lastError) { return; }
 
@@ -368,6 +471,15 @@
             if (nasIsTopFrame) {
                 showNasFab(Message.media);
             }
+            sendResponse("ok");
+            return true;
+        }
+
+        if (Message.Message === "nasResetPage") {
+            if (nasIsTopFrame) {
+                resetNasPage();
+            }
+
             sendResponse("ok");
             return true;
         }
@@ -428,9 +540,10 @@
                 type: "HLS",
                 masterUrl: Message.masterUrl,
                 variants: Message.variants || [],
+                duration: Message.duration || null,
                 selected: 0,
                 referer: Message.referer || "",
-                cookie: Message.cookie || ""
+                cookie: Message.cookie || "",
             });
 
             updateNasFabCount();
