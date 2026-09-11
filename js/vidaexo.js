@@ -255,6 +255,21 @@ function createInvalidRow(item, kind) {
 
   current.append(label, value);
 
+  const contents = document.createElement("span");
+  contents.className = "folder-contents";
+
+  const fileCount = Number.isInteger(item.fileCount) ? item.fileCount : null;
+  const directoryCount = Number.isInteger(item.directoryCount) ? item.directoryCount : null;
+
+  if (fileCount !== null && directoryCount !== null) {
+    contents.textContent =
+      `${fileCount} fichier${fileCount === 1 ? "" : "s"} / ${directoryCount} sous-dossier${directoryCount === 1 ? "" : "s"}`;
+  } else {
+    contents.textContent = "Contenu non disponible";
+  }
+
+  current.appendChild(contents);
+
   const editor = document.createElement("div");
   editor.className = "editor";
 
@@ -277,10 +292,24 @@ function createInvalidRow(item, kind) {
 
   editor.append(input, clearButton);
 
+  const actions = document.createElement("div");
+  actions.className = "row-actions";
+
   const validateButton = document.createElement("button");
   validateButton.type = "button";
   validateButton.className = "validate-button";
   validateButton.textContent = "Valider";
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "delete-button";
+  deleteButton.textContent = "Supprimer";
+  deleteButton.disabled = item.empty !== true;
+  deleteButton.title = item.empty === true
+    ? "Supprimer ce dossier vide"
+    : "Suppression autorisée uniquement pour un dossier vide";
+
+  actions.append(validateButton, deleteButton);
 
   const rowError = document.createElement("div");
   rowError.className = "row-error hidden";
@@ -342,6 +371,52 @@ function createInvalidRow(item, kind) {
 
   validateButton.addEventListener("click", validate);
 
+  deleteButton.addEventListener("click", async () => {
+    if (item.empty !== true) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Supprimer définitivement le dossier vide « ${item.currentName ?? ""} » ?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    input.disabled = true;
+    clearButton.disabled = true;
+    validateButton.disabled = true;
+    deleteButton.disabled = true;
+
+    const response = await runtimeMessage({
+      Message: "vidaexoDeleteInvalid",
+      directoryId: item.directoryId,
+      kind
+    });
+
+    if (response?.ok && response?.data?.state) {
+      renderState(response.data.state);
+
+      if (response?.data?.status?.cataloging) {
+        beginPolling();
+      }
+
+      return;
+    }
+
+    input.disabled = false;
+    clearButton.disabled = false;
+    validateButton.disabled = false;
+    deleteButton.disabled = item.empty !== true;
+
+    rowError.textContent =
+      response?.data?.error ||
+      response?.error ||
+      "La suppression n’a pas pu être effectuée.";
+    rowError.classList.remove("hidden");
+  });
+
   input.addEventListener("keydown", event => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -349,7 +424,7 @@ function createInvalidRow(item, kind) {
     }
   });
 
-  row.append(current, editor, validateButton, rowError);
+  row.append(current, editor, actions, rowError);
   return row;
 }
 
