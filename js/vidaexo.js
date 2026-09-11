@@ -7,6 +7,7 @@ const state = {
 
 const statusText = document.getElementById("statusText");
 const retryButton = document.getElementById("retryButton");
+const launchNotice = document.getElementById("launchNotice");
 const configurationNotice = document.getElementById("configurationNotice");
 const errorNotice = document.getElementById("errorNotice");
 const correctionArea = document.getElementById("correctionArea");
@@ -119,7 +120,19 @@ function renderDebugStatus(status, serviceAvailable = true) {
   lastError.textContent = status?.lastError || "Aucune";
 }
 
+function showLaunchRequired() {
+  launchNotice.classList.remove("hidden");
+  launchNotice.classList.add("hidden");
+  configurationNotice.classList.add("hidden");
+  correctionArea.classList.add("hidden");
+  completeArea.classList.add("hidden");
+  serviceState.textContent = "Non démarré";
+  catalogState.textContent = "Non disponible";
+  statusText.textContent = "Vidaexo doit être ouvert avant de lancer le catalogage.";
+}
+
 function showConfigurationRequired() {
+  launchNotice.classList.add("hidden");
   configurationNotice.classList.remove("hidden");
   correctionArea.classList.add("hidden");
   completeArea.classList.add("hidden");
@@ -127,6 +140,7 @@ function showConfigurationRequired() {
 }
 
 function renderState(catalogStateData) {
+  launchNotice.classList.add("hidden");
   configurationNotice.classList.add("hidden");
   clearError();
 
@@ -414,12 +428,27 @@ async function startCatalog() {
 
   if (!response?.ok) {
     retryButton.disabled = false;
+
+    if (response?.requiresLaunch || response?.error === "VIDAEXO_NOT_RESPONDING") {
+      showLaunchRequired();
+      return;
+    }
+
     statusText.textContent = "Impossible de lancer le catalogage.";
-    showError(
+
+    const detailedError =
+      response?.data?.message ||
+      response?.data?.status?.lastError ||
       response?.data?.error ||
       response?.error ||
-      "Vidaexo ne répond pas."
-    );
+      "Erreur inconnue.";
+
+    showError(detailedError);
+
+    if (response?.data?.status) {
+      renderDebugStatus(response.data.status);
+    }
+
     return;
   }
 
