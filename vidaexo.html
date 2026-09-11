@@ -17,9 +17,16 @@
       <button id="retryButton" class="secondary-button">Relancer</button>
     </header>
 
+    <div id="launchNotice" class="notice hidden">
+      <strong>Vidaexo n’est pas démarré.</strong>
+      <span>Ouvre Vidaexo, puis reviens ici et appuie sur « Relancer ».</span>
+      <a id="launchVidaexoButton" class="secondary-button action-link" href="vidaexo://catalog/start">Ouvrir Vidaexo</a>
+    </div>
+
     <div id="configurationNotice" class="notice hidden">
       <strong>Configuration nécessaire.</strong>
-      <span>Vidaexo a été ouvert pour choisir les dossiers FILLES et SUJETS. Une fois le choix terminé, revenez ici et appuyez sur « Relancer ».</span>
+      <span>Choisis les dossiers FILLES et SUJETS dans Vidaexo, puis reviens ici et appuie sur « Relancer ».</span>
+      <a id="configureVidaexoButton" class="secondary-button action-link" href="vidaexo://catalog/configure">Configurer Vidaexo</a>
     </div>
 
     <div id="errorNotice" class="notice error hidden"></div>
