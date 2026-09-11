@@ -262,3 +262,11 @@ button {
     gap: 3px;
   }
 }
+
+
+.action-link {
+  display: inline-block;
+  width: fit-content;
+  margin-top: 4px;
+  text-decoration: none;
+}
