@@ -605,9 +605,57 @@ async function vidaexoRequest(path, options = {}) {
     }
 }
 
+async function ensureVidaexoStarted() {
+    const health = await vidaexoRequest("/health");
+    if (health.ok) {
+        return {
+            ok: true,
+            alreadyRunning: true,
+            health: health
+        };
+    }
+
+    const launchUrl = "intent://catalog/start#Intent;scheme=vidaexo;package=lorry.vidaexo;end";
+
+    try {
+        await chrome.tabs.create({
+            url: launchUrl,
+            active: true
+        });
+    } catch (error) {
+        return {
+            ok: false,
+            error: String(error)
+        };
+    }
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const retry = await vidaexoRequest("/health");
+        if (retry.ok) {
+            return {
+                ok: true,
+                alreadyRunning: false,
+                health: retry
+            };
+        }
+    }
+
+    return {
+        ok: false,
+        error: "VIDAEXO_NOT_RESPONDING"
+    };
+}
+
 chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
     if (chrome.runtime.lastError) {
         return;
+    }
+
+    if (Message.Message === "vidaexoEnsureStarted") {
+        ensureVidaexoStarted().then(sendResponse);
+        return true;
     }
 
     if (Message.Message === "vidaexoHealth") {
