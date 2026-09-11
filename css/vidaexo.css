@@ -84,7 +84,10 @@ button {
 
 .tab.active {
   font-weight: bold;
-  border-bottom-color: var(--background-color-two);
+  background: #58d3df;
+  color: #07363d;
+  border-color: #36b8c5;
+  border-bottom-color: #58d3df;
 }
 
 .count {
@@ -269,4 +272,35 @@ button {
   width: fit-content;
   margin-top: 4px;
   text-decoration: none;
+}
+
+
+.folder-contents {
+  display: block;
+  margin-top: 5px;
+  color: var(--text2-color);
+  font-size: 0.85rem;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.delete-button {
+  padding: 9px 14px;
+  border: 1px solid #b85b5b;
+  border-radius: 8px;
+  background: transparent;
+  color: #c96b6b;
+}
+
+.delete-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.delete-button:not(:disabled):hover {
+  background: #b85b5b22;
 }
