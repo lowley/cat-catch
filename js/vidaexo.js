@@ -1,7 +1,8 @@
 const state = {
   actresses: [],
   subjects: [],
-  activeTab: "actresses"
+  activeTab: "actresses",
+  pollTimer: null
 };
 
 const statusText = document.getElementById("statusText");
@@ -10,6 +11,12 @@ const configurationNotice = document.getElementById("configurationNotice");
 const errorNotice = document.getElementById("errorNotice");
 const correctionArea = document.getElementById("correctionArea");
 const completeArea = document.getElementById("completeArea");
+
+const serviceState = document.getElementById("serviceState");
+const catalogState = document.getElementById("catalogState");
+const lastStep = document.getElementById("lastStep");
+const progressState = document.getElementById("progressState");
+const lastError = document.getElementById("lastError");
 
 const actressesTab = document.getElementById("actressesTab");
 const subjectsTab = document.getElementById("subjectsTab");
@@ -28,6 +35,7 @@ function runtimeMessage(message) {
         });
         return;
       }
+
       resolve(response ?? { ok: false, error: "NO_RESPONSE" });
     });
   });
@@ -56,6 +64,49 @@ function clearError() {
   errorNotice.classList.add("hidden");
 }
 
+function phaseLabel(phase) {
+  switch (phase) {
+    case "IDLE":
+      return "En attente";
+    case "STARTING":
+      return "Préparation";
+    case "SCANNING_ACTRESSES":
+      return "Lecture de FILLES";
+    case "SCANNING_SUBJECTS":
+      return "Lecture de SUJETS";
+    case "COMPLETE":
+      return "Terminé";
+    case "WAITING_CONFIGURATION":
+      return "Configuration nécessaire";
+    case "ERROR":
+      return "Erreur";
+    default:
+      return phase || "Inconnu";
+  }
+}
+
+function renderDebugStatus(status, serviceAvailable = true) {
+  if (!serviceAvailable) {
+    serviceState.textContent = "Non joignable";
+    catalogState.textContent = "Non disponible";
+    return;
+  }
+
+  serviceState.textContent = status?.serviceStarted ? "Démarré" : "En cours de démarrage…";
+  catalogState.textContent = phaseLabel(status?.phase);
+  lastStep.textContent = status?.lastStep || "—";
+
+  const actressesScanned = Number(status?.actressesScanned || 0);
+  const subjectsScanned = Number(status?.subjectsScanned || 0);
+  const actressesInvalid = Number(status?.actressesInvalid || 0);
+  const subjectsInvalid = Number(status?.subjectsInvalid || 0);
+
+  progressState.textContent =
+    `${actressesScanned} actrices (${actressesInvalid} invalides) / ${subjectsScanned} sujets (${subjectsInvalid} invalides)`;
+
+  lastError.textContent = status?.lastError || "Aucune";
+}
+
 function showConfigurationRequired() {
   configurationNotice.classList.remove("hidden");
   correctionArea.classList.add("hidden");
@@ -63,17 +114,26 @@ function showConfigurationRequired() {
   statusText.textContent = "Configuration initiale nécessaire dans Vidaexo.";
 }
 
-function renderState(catalogState) {
+function renderState(catalogStateData) {
   configurationNotice.classList.add("hidden");
   clearError();
 
-  state.actresses = Array.isArray(catalogState?.actresses) ? catalogState.actresses : [];
-  state.subjects = Array.isArray(catalogState?.subjects) ? catalogState.subjects : [];
+  state.actresses = Array.isArray(catalogStateData?.actresses)
+    ? catalogStateData.actresses
+    : [];
+
+  state.subjects = Array.isArray(catalogStateData?.subjects)
+    ? catalogStateData.subjects
+    : [];
 
   actressesCount.textContent = String(state.actresses.length);
   subjectsCount.textContent = String(state.subjects.length);
 
-  if (catalogState?.complete === true) {
+  if (catalogStateData?.status) {
+    renderDebugStatus(catalogStateData.status);
+  }
+
+  if (catalogStateData?.complete === true) {
     correctionArea.classList.add("hidden");
     completeArea.classList.remove("hidden");
     statusText.textContent = "Aucune correction restante.";
@@ -190,9 +250,20 @@ function createInvalidRow(item, kind) {
       correctedName
     });
 
-    if (response?.ok && response?.data?.state) {
-      renderState(response.data.state);
-      return;
+    if (response?.ok) {
+      if (response?.data?.status) {
+        renderDebugStatus(response.data.status);
+      }
+
+      if (response?.data?.status?.cataloging) {
+        beginPolling();
+        return;
+      }
+
+      if (response?.data?.state) {
+        renderState(response.data.state);
+        return;
+      }
     }
 
     input.disabled = false;
@@ -208,6 +279,7 @@ function createInvalidRow(item, kind) {
   }
 
   validateButton.addEventListener("click", validate);
+
   input.addEventListener("keydown", event => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -219,26 +291,117 @@ function createInvalidRow(item, kind) {
   return row;
 }
 
+async function loadFinalState() {
+  const response = await runtimeMessage({
+    Message: "vidaexoGetCorrectionState"
+  });
+
+  if (!response?.ok || !response?.data) {
+    showError(response?.error || "Impossible de récupérer l’état final du catalogue.");
+    return;
+  }
+
+  renderState(response.data);
+}
+
+async function pollStatusOnce() {
+  const response = await runtimeMessage({
+    Message: "vidaexoGetCatalogStatus"
+  });
+
+  if (!response?.ok || !response?.data) {
+    renderDebugStatus(null, false);
+    return false;
+  }
+
+  const status = response.data;
+  renderDebugStatus(status);
+
+  if (status.phase === "ERROR") {
+    clearPolling();
+    statusText.textContent = "Le catalogage a échoué.";
+    showError(status.lastError || "Erreur inconnue.");
+    retryButton.disabled = false;
+    return false;
+  }
+
+  if (status.phase === "WAITING_CONFIGURATION") {
+    clearPolling();
+    showConfigurationRequired();
+    retryButton.disabled = false;
+    return false;
+  }
+
+  if (!status.cataloging && status.phase === "COMPLETE") {
+    clearPolling();
+    retryButton.disabled = false;
+    await loadFinalState();
+    return false;
+  }
+
+  return true;
+}
+
+function clearPolling() {
+  if (state.pollTimer !== null) {
+    clearTimeout(state.pollTimer);
+    state.pollTimer = null;
+  }
+}
+
+async function pollLoop() {
+  const keepGoing = await pollStatusOnce();
+
+  if (keepGoing) {
+    state.pollTimer = setTimeout(pollLoop, 500);
+  }
+}
+
+function beginPolling() {
+  clearPolling();
+  pollLoop();
+}
+
 async function startCatalog() {
+  clearPolling();
   retryButton.disabled = true;
   configurationNotice.classList.add("hidden");
+  correctionArea.classList.add("hidden");
+  completeArea.classList.add("hidden");
   clearError();
-  statusText.textContent = "Démarrage de Vidaexo et catalogage…";
+
+  statusText.textContent = "Vérification de Vidaexo…";
+  serviceState.textContent = "Vérification…";
+  catalogState.textContent = "En attente";
+
+  const health = await runtimeMessage({
+    Message: "vidaexoHealth"
+  });
+
+  if (health?.ok) {
+    renderDebugStatus(health?.data?.status || {
+      serviceStarted: true,
+      phase: "IDLE"
+    });
+    statusText.textContent = "Vidaexo est démarré. Lancement du catalogage…";
+  } else {
+    renderDebugStatus(null, false);
+    serviceState.textContent = "Démarrage en cours…";
+    statusText.textContent = "Vidaexo n’est pas joignable. Démarrage de l’application…";
+  }
 
   const response = await runtimeMessage({
     Message: "vidaexoStartCatalog"
   });
 
-  retryButton.disabled = false;
-
   if (response?.requiresConfiguration) {
+    retryButton.disabled = false;
     showConfigurationRequired();
     return;
   }
 
   if (!response?.ok) {
-    correctionArea.classList.add("hidden");
-    completeArea.classList.add("hidden");
+    retryButton.disabled = false;
     statusText.textContent = "Impossible de lancer le catalogage.";
     showError(
       response?.data?.error ||
@@ -248,18 +411,20 @@ async function startCatalog() {
     return;
   }
 
-  const catalogState = response?.data?.state;
-  if (!catalogState) {
-    statusText.textContent = "Réponse Vidaexo incomplète.";
-    showError("Vidaexo n’a pas renvoyé l’état du catalogue.");
-    return;
-  }
+  renderDebugStatus(response?.data?.status || {
+    serviceStarted: true,
+    phase: "STARTING",
+    cataloging: true
+  });
 
-  renderState(catalogState);
+  statusText.textContent = "Vidaexo est démarré. Catalogage en cours…";
+  beginPolling();
 }
 
 actressesTab.addEventListener("click", () => setActiveTab("actresses"));
 subjectsTab.addEventListener("click", () => setActiveTab("subjects"));
 retryButton.addEventListener("click", startCatalog);
+
+window.addEventListener("beforeunload", clearPolling);
 
 startCatalog();
