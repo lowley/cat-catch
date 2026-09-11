@@ -707,6 +707,17 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         }).then(sendResponse);
         return true;
     }
+
+    if (Message.Message === "vidaexoDeleteInvalid") {
+        vidaexoRequest("/catalog/delete", {
+            method: "POST",
+            body: JSON.stringify({
+                directoryId: Message.directoryId,
+                kind: Message.kind
+            })
+        }).then(sendResponse);
+        return true;
+    }
     if (!G.initLocalComplete || !G.initSyncComplete) {
         sendResponse("error");
         return true;
