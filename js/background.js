@@ -669,13 +669,29 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
     }
 
     if (Message.Message === "vidaexoStartCatalog") {
-        vidaexoRequest("/catalog/start", {
-            method: "POST",
-            body: JSON.stringify({
-                actressesFolderId: Message.actressesFolderId,
-                subjectsFolderId: Message.subjectsFolderId
-            })
-        }).then(sendResponse);
+        (async () => {
+            const started = await ensureVidaexoStarted();
+            if (!started.ok) {
+                sendResponse(started);
+                return;
+            }
+
+            const payload = {};
+            if (Message.actressesFolderId) {
+                payload.actressesFolderId = Message.actressesFolderId;
+            }
+            if (Message.subjectsFolderId) {
+                payload.subjectsFolderId = Message.subjectsFolderId;
+            }
+
+            const result = await vidaexoRequest("/catalog/start", {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
+
+            sendResponse(result);
+        })();
+
         return true;
     }
 
