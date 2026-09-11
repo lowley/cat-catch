@@ -24,6 +24,29 @@
 
     <div id="errorNotice" class="notice error hidden"></div>
 
+    <section class="debug-panel">
+      <div class="debug-row">
+        <span class="debug-label">Vidaexo</span>
+        <span id="serviceState" class="debug-value">En attente…</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Catalogage</span>
+        <span id="catalogState" class="debug-value">Non démarré</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Dernière étape</span>
+        <span id="lastStep" class="debug-value">—</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Progression</span>
+        <span id="progressState" class="debug-value">0 actrices / 0 sujets</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-label">Dernière erreur</span>
+        <span id="lastError" class="debug-value">Aucune</span>
+      </div>
+    </section>
+
     <section id="correctionArea" class="hidden">
       <div class="tabs" role="tablist" aria-label="Type de correction">
         <button id="actressesTab" class="tab active" role="tab" aria-selected="true">
