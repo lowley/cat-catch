@@ -97,12 +97,24 @@ function renderDebugStatus(status, serviceAvailable = true) {
   lastStep.textContent = status?.lastStep || "—";
 
   const actressesScanned = Number(status?.actressesScanned || 0);
+  const actressesTotal = Number(status?.actressesTotal || 0);
   const subjectsScanned = Number(status?.subjectsScanned || 0);
+  const subjectsTotal = Number(status?.subjectsTotal || 0);
   const actressesInvalid = Number(status?.actressesInvalid || 0);
   const subjectsInvalid = Number(status?.subjectsInvalid || 0);
+  const currentDirectoryName = status?.currentDirectoryName || "";
+
+  const actressesProgress = actressesTotal > 0
+    ? `${actressesScanned}/${actressesTotal}`
+    : String(actressesScanned);
+
+  const subjectsProgress = subjectsTotal > 0
+    ? `${subjectsScanned}/${subjectsTotal}`
+    : String(subjectsScanned);
 
   progressState.textContent =
-    `${actressesScanned} actrices (${actressesInvalid} invalides) / ${subjectsScanned} sujets (${subjectsInvalid} invalides)`;
+    `FILLES ${actressesProgress} (${actressesInvalid} invalides) / SUJETS ${subjectsProgress} (${subjectsInvalid} invalides)` +
+    (currentDirectoryName ? ` — ${currentDirectoryName}` : "");
 
   lastError.textContent = status?.lastError || "Aucune";
 }
