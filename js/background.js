@@ -572,9 +572,85 @@ function save(tabId) {
 /**
  * 监听 扩展 message 事件
  */
+const VIDAEXO_BASE_URL = "http://127.0.0.1:8765";
+
+async function vidaexoRequest(path, options = {}) {
+    try {
+        const response = await fetch(VIDAEXO_BASE_URL + path, {
+            headers: {
+                "Content-Type": "application/json",
+                ...(options.headers || {})
+            },
+            ...options
+        });
+
+        let data = null;
+        try {
+            data = await response.json();
+        } catch (_) {
+            data = null;
+        }
+
+        return {
+            ok: response.ok,
+            status: response.status,
+            data: data
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            status: 0,
+            error: String(error)
+        };
+    }
+}
+
 chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
     if (chrome.runtime.lastError) {
         return;
+    }
+
+    if (Message.Message === "vidaexoHealth") {
+        vidaexoRequest("/health").then(sendResponse);
+        return true;
+    }
+
+    if (Message.Message === "vidaexoGetCorrectionState") {
+        vidaexoRequest("/catalog/state").then(sendResponse);
+        return true;
+    }
+
+    if (Message.Message === "vidaexoStartCatalog") {
+        vidaexoRequest("/catalog/start", {
+            method: "POST",
+            body: JSON.stringify({
+                actressesFolderId: Message.actressesFolderId,
+                subjectsFolderId: Message.subjectsFolderId
+            })
+        }).then(sendResponse);
+        return true;
+    }
+
+    if (Message.Message === "vidaexoCorrectActress") {
+        vidaexoRequest("/catalog/correct/actress", {
+            method: "POST",
+            body: JSON.stringify({
+                directoryId: Message.directoryId,
+                correctedName: Message.correctedName
+            })
+        }).then(sendResponse);
+        return true;
+    }
+
+    if (Message.Message === "vidaexoCorrectSubject") {
+        vidaexoRequest("/catalog/correct/subject", {
+            method: "POST",
+            body: JSON.stringify({
+                directoryId: Message.directoryId,
+                correctedName: Message.correctedName
+            })
+        }).then(sendResponse);
+        return true;
     }
     if (!G.initLocalComplete || !G.initSyncComplete) {
         sendResponse("error");
