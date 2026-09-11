@@ -605,26 +605,9 @@ async function vidaexoRequest(path, options = {}) {
     }
 }
 
-async function openVidaexoConfiguration() {
-    const configureUrl = "intent://catalog/configure#Intent;scheme=vidaexo;package=lorry.vidaexo;end";
-
-    try {
-        await chrome.tabs.create({
-            url: configureUrl,
-            active: true
-        });
-
-        return { ok: true };
-    } catch (error) {
-        return {
-            ok: false,
-            error: String(error)
-        };
-    }
-}
-
 async function ensureVidaexoStarted() {
     const health = await vidaexoRequest("/health");
+
     if (health.ok) {
         return {
             ok: true,
@@ -633,35 +616,9 @@ async function ensureVidaexoStarted() {
         };
     }
 
-    const launchUrl = "intent://catalog/start#Intent;scheme=vidaexo;package=lorry.vidaexo;end";
-
-    try {
-        await chrome.tabs.create({
-            url: launchUrl,
-            active: true
-        });
-    } catch (error) {
-        return {
-            ok: false,
-            error: String(error)
-        };
-    }
-
-    for (let attempt = 0; attempt < 12; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        const retry = await vidaexoRequest("/health");
-        if (retry.ok) {
-            return {
-                ok: true,
-                alreadyRunning: false,
-                health: retry
-            };
-        }
-    }
-
     return {
         ok: false,
+        requiresLaunch: true,
         error: "VIDAEXO_NOT_RESPONDING"
     };
 }
@@ -702,13 +659,10 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
             const configured = started.health?.data?.configured === true;
 
             if (!configured && !Message.actressesFolderId && !Message.subjectsFolderId) {
-                const opened = await openVidaexoConfiguration();
-
                 sendResponse({
                     ok: false,
                     requiresConfiguration: true,
-                    configurationOpened: opened.ok,
-                    error: opened.ok ? "CATALOG_FOLDERS_NOT_CONFIGURED" : opened.error
+                    error: "CATALOG_FOLDERS_NOT_CONFIGURED"
                 });
                 return;
             }
