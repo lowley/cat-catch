@@ -686,6 +686,11 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         return true;
     }
 
+    if (Message.Message === "vidaexoGetCatalogStatus") {
+        vidaexoRequest("/catalog/status").then(sendResponse);
+        return true;
+    }
+
     if (Message.Message === "vidaexoStartCatalog") {
         (async () => {
             const started = await ensureVidaexoStarted();
