@@ -2,7 +2,8 @@ const state = {
   actresses: [],
   subjects: [],
   activeTab: "actresses",
-  pollTimer: null
+  pollTimer: null,
+  resumeCheckInProgress: false
 };
 
 const statusText = document.getElementById("statusText");
@@ -122,7 +123,6 @@ function renderDebugStatus(status, serviceAvailable = true) {
 
 function showLaunchRequired() {
   launchNotice.classList.remove("hidden");
-  launchNotice.classList.add("hidden");
   configurationNotice.classList.add("hidden");
   correctionArea.classList.add("hidden");
   completeArea.classList.add("hidden");
@@ -137,6 +137,42 @@ function showConfigurationRequired() {
   correctionArea.classList.add("hidden");
   completeArea.classList.add("hidden");
   statusText.textContent = "Configuration initiale nécessaire dans Vidaexo.";
+}
+
+async function refreshAfterReturn() {
+  if (state.resumeCheckInProgress || document.visibilityState !== "visible") {
+    return;
+  }
+
+  state.resumeCheckInProgress = true;
+
+  try {
+    const health = await runtimeMessage({
+      Message: "vidaexoHealth"
+    });
+
+    if (!health?.ok) {
+      return;
+    }
+
+    launchNotice.classList.add("hidden");
+
+    renderDebugStatus(health?.data?.status || {
+      serviceStarted: true,
+      phase: "IDLE"
+    });
+
+    statusText.textContent = "Vidaexo est démarré.";
+
+    if (health?.data?.configured === false) {
+      showConfigurationRequired();
+      return;
+    }
+
+    await startCatalog();
+  } finally {
+    state.resumeCheckInProgress = false;
+  }
 }
 
 function renderState(catalogStateData) {
@@ -467,5 +503,13 @@ subjectsTab.addEventListener("click", () => setActiveTab("subjects"));
 retryButton.addEventListener("click", startCatalog);
 
 window.addEventListener("beforeunload", clearPolling);
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    refreshAfterReturn();
+  }
+});
+
+window.addEventListener("focus", refreshAfterReturn);
 
 startCatalog();
