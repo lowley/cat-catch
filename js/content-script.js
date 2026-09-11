@@ -15,6 +15,56 @@
         location.hostname === "10.0.0.1" &&
         location.port === "9876" &&
         location.pathname.startsWith("/status");
+    const nasIsHotMoviesDescriptionPage =
+        nasIsTopFrame &&
+        location.hostname === "www.hotmovies.com" &&
+        /^\/\d+\/[^/]+\.html$/i.test(location.pathname) &&
+        new URL(location.href).searchParams.get("viewpart") !== "videoplayer";
+
+    function nasLoadHotMoviesPlayerInBackground() {
+        if (!nasIsTopFrame) {
+            return;
+        }
+
+        const url = new URL(location.href);
+
+        if (url.hostname !== "www.hotmovies.com") {
+            return;
+        }
+
+        // Ne rien faire si nous sommes déjà sur la page du lecteur
+        if (url.searchParams.get("viewpart") === "videoplayer") {
+            return;
+        }
+
+        // Seulement les pages vidéo du type /1234567/nom-video.html
+        if (!/^\/\d+\/[^/]+\.html$/i.test(url.pathname)) {
+            return;
+        }
+
+        // Évite de créer l'iframe plusieurs fois
+        if (document.getElementById("catcatch-hotmovies-player")) {
+            return;
+        }
+
+        const playerUrl = new URL(url.href);
+        playerUrl.searchParams.set("viewpart", "videoplayer");
+
+        const iframe = document.createElement("iframe");
+        iframe.id = "catcatch-hotmovies-player";
+        iframe.src = playerUrl.href;
+
+        iframe.style.position = "fixed";
+        iframe.style.width = "1px";
+        iframe.style.height = "1px";
+        iframe.style.left = "-10000px";
+        iframe.style.top = "-10000px";
+        iframe.style.opacity = "0";
+        iframe.style.pointerEvents = "none";
+        iframe.style.border = "0";
+
+        document.documentElement.appendChild(iframe);
+    }
 
     function createNasStatusBackButton() {
         if (document.getElementById("catcatch-nas-status-back")) {
@@ -58,9 +108,9 @@
             createNasStatusBackButton();
         } else {
             prepareNasFab();
+            nasLoadHotMoviesPlayerInBackground();
         }
     }
-
 
     function toggleNasPanel() {
         if (nasPanel) {
@@ -88,6 +138,18 @@
         renderNasPanel();
     }
 
+    function getNasSelectedCount() {
+        let count = 0;
+
+        for (const video of nasVideos.values()) {
+            if (video.selected >= 0 && video.variants[video.selected]) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     function renderNasPanel() {
         if (!nasPanel) {
             return;
@@ -111,7 +173,7 @@
         heading.style.fontWeight = "bold";
 
         const send = document.createElement("button");
-        send.textContent = "SEND " + nasVideos.size;
+        send.textContent = "SEND " + getNasSelectedCount() + "/" + nasVideos.size;
         send.style.border = "0";
         send.style.borderRadius = "10px";
         send.style.padding = "9px 14px";
@@ -150,7 +212,8 @@
                                     cookie: video.cookie || "",
                                     userAgent: navigator.userAgent,
                                     title: video.title || "Vidéo",
-                                    filename: video.title || "video"
+                                    filename: video.title || "video",
+                                    duration: video.duration || null,
                                 }
                             },
                             function (response) {
@@ -231,6 +294,25 @@
         return Math.round(bytes / 1024) + " Ko";
     }
 
+    function applyNasDefaultSelections() {
+        if (nasVideos.size !== 1) {
+            for (const video of nasVideos.values()) {
+                video.selected = -1;
+            }
+            return;
+        }
+
+        const video = nasVideos.values().next().value;
+
+        const index360 = video.variants.findIndex(function (variant) {
+            const resolution = String(variant.resolution || "");
+            const match = resolution.match(/x(\d+)$/);
+            return match && Number(match[1]) === 360;
+        });
+
+        video.selected = index360 >= 0 ? index360 : -1;
+    }
+
     function createNasVideoCard(key, video) {
         const card = document.createElement("div");
         card.style.margin = "0 12px 12px";
@@ -260,6 +342,32 @@
         titleLine.appendChild(badge);
         card.appendChild(titleLine);
 
+        const noDownloadLabel = document.createElement("label");
+        noDownloadLabel.style.display = "flex";
+        noDownloadLabel.style.alignItems = "center";
+        noDownloadLabel.style.gap = "6px";
+        noDownloadLabel.style.padding = "3px 2px";
+        noDownloadLabel.style.color = "white";
+
+        const noDownloadRadio = document.createElement("input");
+        noDownloadRadio.type = "radio";
+        noDownloadRadio.name = "nas-video-" + key;
+        noDownloadRadio.checked = video.selected === -1;
+        noDownloadRadio.style.margin = "0";
+
+        noDownloadRadio.addEventListener("change", function () {
+            video.selected = -1;
+            renderNasPanel();
+        });
+
+        const noDownloadText = document.createElement("span");
+        noDownloadText.textContent = "Ne pas télécharger";
+        noDownloadText.style.fontSize = "14px";
+
+        noDownloadLabel.appendChild(noDownloadRadio);
+        noDownloadLabel.appendChild(noDownloadText);
+        card.appendChild(noDownloadLabel);
+
         video.variants.forEach((variant, index) => {
             const label = document.createElement("label");
             label.style.display = "flex";
@@ -277,6 +385,7 @@
 
             radio.addEventListener("change", function () {
                 video.selected = index;
+                renderNasPanel();
             });
 
             const resolution = document.createElement("span");
@@ -287,12 +396,6 @@
 
             if (variant.resolution && variant.resolution.includes("x")) {
                 text = variant.resolution.split("x")[1] + "p";
-            }
-
-            const bitrate = variant.averageBandwidth || variant.bandwidth;
-
-            if (bitrate) {
-                text += "  •  " + (bitrate / 1000000).toFixed(1) + " Mb/s";
             }
 
             if (variant.estimatedSize) {
@@ -469,8 +572,17 @@
 
         if (Message.Message === "nasVideoDetected") {
             if (nasIsTopFrame) {
+
+                // Sur la page descriptive HotMovies,
+                // ignorer les médias provenant directement de la page principale.
+                if (nasIsHotMoviesDescriptionPage && Message.sourceFrameId === 0) {
+                    sendResponse("ignored");
+                    return true;
+                }
+
                 showNasFab(Message.media);
             }
+
             sendResponse("ok");
             return true;
         }
@@ -535,17 +647,23 @@
         }
 
         if (Message.Message === "nasHlsVariants") {
+            if (nasIsHotMoviesDescriptionPage && Message.sourceFrameId === 0) {
+                sendResponse("ignored");
+                return true;
+            }
+
             nasVideos.set(Message.masterUrl, {
                 title: Message.title || "Vidéo",
                 type: "HLS",
                 masterUrl: Message.masterUrl,
                 variants: Message.variants || [],
                 duration: Message.duration || null,
-                selected: 0,
+                selected: -1,
                 referer: Message.referer || "",
                 cookie: Message.cookie || "",
             });
 
+            applyNasDefaultSelections();
             updateNasFabCount();
 
             if (nasPanel) {

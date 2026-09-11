@@ -181,6 +181,7 @@ async function nasParseMaster(info) {
             info.tabId,
             {
                 Message: "nasHlsVariants",
+                sourceFrameId: info.frameId ?? 0,
                 title: info.title,
                 masterUrl: info.url,
                 variants: variants,
@@ -420,6 +421,7 @@ function findMedia(data, isRegex = false, filter = false, timer = false) {
             ext: ext,
             type: data.mime ?? data.header?.type,
             tabId: data.tabId,
+            frameId: data.frameId ?? 0,
             isRegex: isRegex,
             requestId: data.requestId ?? Date.now().toString(),
             initiator: data.initiator,
@@ -471,6 +473,7 @@ function findMedia(data, isRegex = false, filter = false, timer = false) {
                 info.tabId,
                 {
                     Message: "nasVideoDetected",
+                    sourceFrameId: info.frameId,
                     media: {
                         requestId: info.requestId,
                         url: info.url,

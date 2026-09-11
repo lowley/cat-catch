@@ -5,11 +5,14 @@ EDGE="/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
 PROJECT="$(cd "$(dirname "$0")" && pwd)"
 KEY="$(dirname "$PROJECT")/cat-catch.pem"
 CRX="$(dirname "$PROJECT")/cat-catch.crx"
-OUT="/Volumes/Download/catcatch"
+
+NAS_HOST="10.0.0.1"
+NAS_USER="olivier"
+NAS_DIR="/share/Download/catcatch"
 
 "$EDGE" --pack-extension="$PROJECT" --pack-extension-key="$KEY" --no-message-box
 
-mkdir -p "$OUT"
-cp "$CRX" "$OUT/catcatch-nas.bin"
+ssh "$NAS_USER@$NAS_HOST" "mkdir -p '$NAS_DIR'"
+scp "$CRX" "$NAS_USER@$NAS_HOST:$NAS_DIR/catcatch-nas.bin"
 
-echo "Build copié vers $OUT/catcatch-nas.bin"
+echo "Build copié vers $NAS_HOST:$NAS_DIR/catcatch-nas.bin"
