@@ -605,6 +605,24 @@ async function vidaexoRequest(path, options = {}) {
     }
 }
 
+async function openVidaexoConfiguration() {
+    const configureUrl = "intent://catalog/configure#Intent;scheme=vidaexo;package=lorry.vidaexo;end";
+
+    try {
+        await chrome.tabs.create({
+            url: configureUrl,
+            active: true
+        });
+
+        return { ok: true };
+    } catch (error) {
+        return {
+            ok: false,
+            error: String(error)
+        };
+    }
+}
+
 async function ensureVidaexoStarted() {
     const health = await vidaexoRequest("/health");
     if (health.ok) {
@@ -673,6 +691,20 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
             const started = await ensureVidaexoStarted();
             if (!started.ok) {
                 sendResponse(started);
+                return;
+            }
+
+            const configured = started.health?.data?.configured === true;
+
+            if (!configured && !Message.actressesFolderId && !Message.subjectsFolderId) {
+                const opened = await openVidaexoConfiguration();
+
+                sendResponse({
+                    ok: false,
+                    requiresConfiguration: true,
+                    configurationOpened: opened.ok,
+                    error: opened.ok ? "CATALOG_FOLDERS_NOT_CONFIGURED" : opened.error
+                });
                 return;
             }
 
