@@ -304,10 +304,10 @@ function createInvalidRow(item, kind) {
   deleteButton.type = "button";
   deleteButton.className = "delete-button";
   deleteButton.textContent = "Supprimer";
-  deleteButton.disabled = item.empty !== true;
+  deleteButton.disabled = false;
   deleteButton.title = item.empty === true
     ? "Supprimer ce dossier vide"
-    : "Suppression autorisée uniquement pour un dossier vide";
+    : "Supprimer ce dossier et tout son contenu";
 
   actions.append(validateButton, deleteButton);
 
@@ -372,12 +372,20 @@ function createInvalidRow(item, kind) {
   validateButton.addEventListener("click", validate);
 
   deleteButton.addEventListener("click", async () => {
-    if (item.empty !== true) {
-      return;
-    }
+    const fileLabel =
+      fileCount === null
+        ? "nombre de fichiers inconnu"
+        : `${fileCount} fichier${fileCount === 1 ? "" : "s"}`;
+
+    const directoryLabel =
+      directoryCount === null
+        ? "nombre de sous-dossiers inconnu"
+        : `${directoryCount} sous-dossier${directoryCount === 1 ? "" : "s"}`;
 
     const confirmed = window.confirm(
-      `Supprimer définitivement le dossier vide « ${item.currentName ?? ""} » ?`
+      `Supprimer définitivement le dossier « ${item.currentName ?? ""} » ?\n\n` +
+      `Contenu : ${fileLabel}, ${directoryLabel}.\n` +
+      "Tout le contenu de ce dossier sera supprimé."
     );
 
     if (!confirmed) {
@@ -408,7 +416,7 @@ function createInvalidRow(item, kind) {
     input.disabled = false;
     clearButton.disabled = false;
     validateButton.disabled = false;
-    deleteButton.disabled = item.empty !== true;
+    deleteButton.disabled = false;
 
     rowError.textContent =
       response?.data?.error ||
