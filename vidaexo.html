@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vidaexo — Correction du catalogue</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" type="text/css" href="css/public.css" />
+  <link rel="stylesheet" type="text/css" href="css/vidaexo.css" />
+</head>
+<body>
+  <main class="catalog-page">
+    <header class="catalog-header">
+      <div>
+        <h1>Correction du catalogue</h1>
+        <p id="statusText">Connexion à Vidaexo…</p>
+      </div>
+      <button id="retryButton" class="secondary-button">Relancer</button>
+    </header>
+
+    <div id="configurationNotice" class="notice hidden">
+      <strong>Configuration nécessaire.</strong>
+      <span>Vidaexo a été ouvert pour choisir les dossiers FILLES et SUJETS. Une fois le choix terminé, revenez ici et appuyez sur « Relancer ».</span>
+    </div>
+
+    <div id="errorNotice" class="notice error hidden"></div>
+
+    <section id="correctionArea" class="hidden">
+      <div class="tabs" role="tablist" aria-label="Type de correction">
+        <button id="actressesTab" class="tab active" role="tab" aria-selected="true">
+          Actrices <span id="actressesCount" class="count">0</span>
+        </button>
+        <button id="subjectsTab" class="tab" role="tab" aria-selected="false">
+          Sujets <span id="subjectsCount" class="count">0</span>
+        </button>
+      </div>
+
+      <div id="actressesPanel" class="tab-panel active" role="tabpanel"></div>
+      <div id="subjectsPanel" class="tab-panel" role="tabpanel"></div>
+    </section>
+
+    <section id="completeArea" class="complete hidden">
+      <h2>Catalogue corrigé</h2>
+      <p>Il ne reste plus d’entrée invalide. Vidaexo a effectué le nouveau catalogage.</p>
+    </section>
+  </main>
+
+  <script src="js/vidaexo.js"></script>
+</body>
+</html>
