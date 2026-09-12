@@ -23,7 +23,6 @@
 
     const catCatchIsLocalNewTab =
         nasIsTopFrame &&
-        (location.hostname === "127.0.0.1" || location.hostname === "localhost") &&
         /(?:^|\/)newtab\.html$/i.test(location.pathname);
 
     if (catCatchIsLocalNewTab) {
