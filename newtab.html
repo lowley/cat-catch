@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CatCatch — Nouvel onglet</title>
+  <link rel="stylesheet" href="css/newtab.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="quick-actions" aria-label="Actions CatCatch">
+      <button id="downloadCrxButton" class="tech-button" type="button">Télécharger CatCatch</button>
+      <button id="vidaexoButton" class="tech-button" type="button">Vidaexo</button>
+      <span id="actionStatus" class="action-status" aria-live="polite"></span>
+    </section>
+
+    <section class="bookmarks-section">
+      <header class="bookmarks-header">
+        <div>
+          <h1>Favoris</h1>
+          <p>Nouvel onglet CatCatch</p>
+        </div>
+      </header>
+
+      <div id="bookmarksRoot" class="bookmark-groups"></div>
+      <div id="bookmarksEmpty" class="bookmarks-empty hidden">
+        Aucun favori à afficher.
+      </div>
+    </section>
+  </main>
+
+  <script src="js/newtab.js"></script>
+</body>
+</html>
