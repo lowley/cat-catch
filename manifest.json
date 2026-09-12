@@ -82,8 +82,5 @@
   ],
   "default_locale": "en",
   "version": "2.7.2",
-  "incognito": "split",
-  "chrome_url_overrides": {
-    "newtab": "newtab.html"
-  }
+  "incognito": "split"
 }
