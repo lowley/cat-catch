@@ -648,6 +648,31 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         return true;
     }
 
+    if (Message.Message === "newTabGetBookmarks") {
+        chrome.bookmarks.getTree().then(
+            tree => sendResponse({ ok: true, tree }),
+            error => sendResponse({ ok: false, error: String(error) })
+        );
+        return true;
+    }
+
+    if (Message.Message === "newTabDownloadCrx") {
+        chrome.storage.local.get("newTabCrxUrl").then(settings => {
+            const url = settings.newTabCrxUrl || "http://10.0.0.1:9876/catcatch-nas.bin";
+
+            return chrome.downloads.download({
+                url,
+                filename: "catcatch-nas.crx",
+                saveAs: false
+            });
+        }).then(
+            downloadId => sendResponse({ ok: true, downloadId }),
+            error => sendResponse({ ok: false, error: String(error) })
+        );
+
+        return true;
+    }
+
     if (Message.Message === "vidaexoStartCatalog") {
         (async () => {
             const started = await ensureVidaexoStarted();
