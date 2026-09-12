@@ -33,7 +33,8 @@
     "declarativeNetRequest",
     "scripting",
     "sidePanel",
-    "contextMenus"
+    "contextMenus",
+    "bookmarks"
   ],
   "commands": {
     "_execute_action": {},
@@ -81,5 +82,8 @@
   ],
   "default_locale": "en",
   "version": "2.7.2",
-  "incognito": "split"
+  "incognito": "split",
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  }
 }
