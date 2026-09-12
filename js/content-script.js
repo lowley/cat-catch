@@ -498,8 +498,53 @@
             }
         });
 
+        const actions = document.createElement("div");
+        actions.style.display = "flex";
+        actions.style.gap = "8px";
+        actions.style.alignItems = "center";
+
+        const favorite = document.createElement("button");
+        favorite.textContent = "★ FAVORI";
+        favorite.style.border = "1px solid #555";
+        favorite.style.borderRadius = "10px";
+        favorite.style.padding = "9px 12px";
+        favorite.style.background = "#1b1b1b";
+        favorite.style.color = "white";
+        favorite.style.fontWeight = "bold";
+        favorite.style.fontSize = "13px";
+        favorite.style.cursor = "pointer";
+
+        favorite.addEventListener("click", function () {
+            favorite.disabled = true;
+            favorite.textContent = "OUVERTURE…";
+
+            chrome.runtime.sendMessage(
+                {
+                    Message: "newTabAddFavorite",
+                    url: location.href,
+                    title: document.title || location.href
+                },
+                function (response) {
+                    if (chrome.runtime.lastError || !response?.ok) {
+                        favorite.textContent = "✕ ERREUR";
+                        favorite.disabled = false;
+                        return;
+                    }
+
+                    favorite.textContent = "✓ FAVORI";
+                    setTimeout(function () {
+                        favorite.textContent = "★ FAVORI";
+                        favorite.disabled = false;
+                    }, 1200);
+                }
+            );
+        });
+
+        actions.appendChild(favorite);
+        actions.appendChild(send);
+
         header.appendChild(heading);
-        header.appendChild(send);
+        header.appendChild(actions);
         nasPanel.appendChild(header);
 
         for (const [key, video] of nasVideos) {
