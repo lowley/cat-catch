@@ -758,6 +758,14 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         }).then(sendResponse);
         return true;
     }
+
+    if (Message.Message === "vidaexoRegisterVideo") {
+        vidaexoRequest("/videos/register", {
+            method: "POST",
+            body: JSON.stringify(Message.videoRecord || {})
+        }).then(sendResponse);
+        return true;
+    }
     if (!G.initLocalComplete || !G.initSyncComplete) {
         sendResponse("error");
         return true;
@@ -775,15 +783,29 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         })
             .then(async response => {
                 const text = await response.text();
+                let vidaexo = null;
+
+                if (response.ok && Message.videoRecord) {
+                    vidaexo = await vidaexoRequest("/videos/register", {
+                        method: "POST",
+                        body: JSON.stringify(Message.videoRecord)
+                    });
+                }
+
                 sendResponse({
-                    ok: response.ok,
+                    ok: response.ok && (!Message.videoRecord || vidaexo?.ok === true),
+                    nasOk: response.ok,
+                    metadataSaved: !Message.videoRecord || vidaexo?.ok === true,
                     status: response.status,
-                    text: text
+                    text: text,
+                    vidaexo: vidaexo
                 });
             })
             .catch(error => {
                 sendResponse({
                     ok: false,
+                    nasOk: false,
+                    metadataSaved: false,
                     error: String(error)
                 });
             });
