@@ -673,6 +673,21 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         return true;
     }
 
+    if (Message.Message === "newTabAddFavorite") {
+        chrome.storage.local.get("newTabHomeUrl").then(settings => {
+            const homeUrl = settings.newTabHomeUrl || "http://127.0.0.1:8080/newtab.html";
+            const url = new URL(homeUrl);
+            url.searchParams.set("addUrl", Message.url || "");
+            url.searchParams.set("addTitle", Message.title || Message.url || "");
+            return chrome.tabs.create({ url: url.href, active: true });
+        }).then(
+            tab => sendResponse({ ok: true, tabId: tab?.id ?? null }),
+            error => sendResponse({ ok: false, error: String(error) })
+        );
+
+        return true;
+    }
+
     if (Message.Message === "vidaexoStartCatalog") {
         (async () => {
             const started = await ensureVidaexoStarted();
