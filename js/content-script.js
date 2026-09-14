@@ -524,8 +524,18 @@
                 const status = Number(firstError?.status || 0);
                 const detail = String(firstError?.error || "").trim();
 
-                send.textContent = "✕ " + stage + (status ? " " + status : "");
+                const compactDetail = detail
+                    .replace(/^TypeError:\s*/i, "")
+                    .replace(/^Error:\s*/i, "")
+                    .slice(0, 80);
+
+                send.textContent =
+                    "✕ " + stage +
+                    (status ? " " + status : "") +
+                    (compactDetail ? " — " + compactDetail : "");
                 send.title = detail;
+                send.style.maxWidth = "320px";
+                send.style.whiteSpace = "normal";
                 send.disabled = false;
             }
         });
