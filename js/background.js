@@ -791,6 +791,9 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                 if (!naming.ok || !naming.data?.targetName) {
                     sendResponse({
                         ok: false,
+                        stage: "NAMING",
+                        status: naming.status ?? 0,
+                        error: naming.data?.error || naming.error || "NAMING_FAILED",
                         nasOk: false,
                         namingOk: false,
                         vidaexo: naming
@@ -817,6 +820,9 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                 if (!pending.ok || !pending.data?.id) {
                     sendResponse({
                         ok: false,
+                        stage: "PENDING",
+                        status: pending.status ?? 0,
+                        error: pending.data?.error || pending.error || "PENDING_FAILED",
                         nasOk: false,
                         pendingSaved: false,
                         vidaexo: pending
@@ -855,9 +861,11 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
 
                     sendResponse({
                         ok: false,
+                        stage: "NAS",
+                        status: response.status,
+                        error: nasPayload?.error || text || "NAS_DOWNLOAD_FAILED",
                         nasOk: false,
                         pendingSaved: Boolean(pendingId),
-                        status: response.status,
                         text
                     });
                     return;
@@ -880,6 +888,9 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
 
                         sendResponse({
                             ok: false,
+                            stage: "JOB LINK",
+                            status: attached.status ?? 0,
+                            error: attached.data?.error || attached.error || "JOB_LINK_FAILED",
                             nasOk: true,
                             pendingSaved: false,
                             job: nasPayload.job,
@@ -908,6 +919,8 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
 
                 sendResponse({
                     ok: false,
+                    stage: "NETWORK",
+                    status: 0,
                     nasOk: false,
                     pendingSaved: false,
                     error: String(error)
