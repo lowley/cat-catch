@@ -877,11 +877,41 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
     if (Message.Message === "nasSendToServer") {
         (async () => {
             let pendingId = null;
+            let pendingVideo = Message.pendingVideo || null;
 
-            if (Message.pendingVideo) {
+            if (Message.namingRequest) {
+                const naming = await vidaexoRequest("/videos/naming", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        html: Message.namingRequest.html || "",
+                        initialName: Message.namingRequest.initialName || ""
+                    })
+                });
+
+                if (!naming.ok || !naming.data?.targetName) {
+                    sendResponse({
+                        ok: false,
+                        nasOk: false,
+                        namingOk: false,
+                        vidaexo: naming
+                    });
+                    return;
+                }
+
+                Message.data.filename = naming.data.targetName;
+
+                pendingVideo = {
+                    sourceUrl: Message.namingRequest.sourceUrl || null,
+                    originalFilename: Message.namingRequest.initialName,
+                    targetName: naming.data.targetName,
+                    catalogEntities: naming.data.catalogEntities || []
+                };
+            }
+
+            if (pendingVideo) {
                 const pending = await vidaexoRequest("/videos/pending", {
                     method: "POST",
-                    body: JSON.stringify(Message.pendingVideo)
+                    body: JSON.stringify(pendingVideo)
                 });
 
                 if (!pending.ok || !pending.data?.id) {
