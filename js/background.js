@@ -76,10 +76,6 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
         (chrome.storage.session ?? chrome.storage.local).set({MediaData: cacheData});
         return;
     }
-    if (alarm.name === NAS_COMPLETION_ALARM) {
-        pollNasCompletion();
-        return;
-    }
 });
 
 async function nasParseMaster(info) {
@@ -578,102 +574,6 @@ function save(tabId) {
  */
 const VIDAEXO_BASE_URL = "http://127.0.0.1:8765";
 const NAS_BASE_URL = "http://10.0.0.1:9876";
-const NAS_COMPLETION_ALARM = "vidaexoNasCompletionWatch";
-const NAS_PENDING_JOBS_KEY = "vidaexoNasPendingJobs";
-
-async function loadNasPendingJobs() {
-    const data = await chrome.storage.session.get(NAS_PENDING_JOBS_KEY);
-    return data[NAS_PENDING_JOBS_KEY] || {};
-}
-
-async function saveNasPendingJobs(entries) {
-    await chrome.storage.session.set({
-        [NAS_PENDING_JOBS_KEY]: entries
-    });
-}
-
-async function scheduleNasCompletionWatch() {
-    chrome.alarms.create(NAS_COMPLETION_ALARM, {
-        when: Date.now() + 5000
-    });
-}
-
-async function rememberNasPendingJob(jobId, pendingId) {
-    const entries = await loadNasPendingJobs();
-    entries[jobId] = { pendingId };
-    await saveNasPendingJobs(entries);
-    await scheduleNasCompletionWatch();
-}
-
-async function pollNasCompletion() {
-    const entries = await loadNasPendingJobs();
-    const jobIds = Object.keys(entries);
-
-    if (jobIds.length === 0) {
-        chrome.alarms.clear(NAS_COMPLETION_ALARM);
-        return;
-    }
-
-    try {
-        const response = await fetch(NAS_BASE_URL + "/api/status", {
-            cache: "no-store"
-        });
-
-        if (!response.ok) {
-            await scheduleNasCompletionWatch();
-            return;
-        }
-
-        const payload = await response.json();
-        const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
-        let changed = false;
-
-        for (const jobId of jobIds) {
-            const tracked = entries[jobId];
-            const job = jobs.find(item => item?.id === jobId);
-
-            if (!job) {
-                continue;
-            }
-
-            if (job.status === "done") {
-                const completed = await vidaexoRequest("/videos/complete", {
-                    method: "POST",
-                    body: JSON.stringify({
-                        pendingId: tracked.pendingId,
-                        nasPath: job.output || "",
-                        currentFilename: job.file || ""
-                    })
-                });
-
-                if (completed.ok) {
-                    delete entries[jobId];
-                    changed = true;
-                }
-            } else if (job.status === "error") {
-                await vidaexoRequest("/videos/pending/cancel", {
-                    method: "POST",
-                    body: JSON.stringify({
-                        pendingId: tracked.pendingId
-                    })
-                });
-
-                delete entries[jobId];
-                changed = true;
-            }
-        }
-
-        if (changed) {
-            await saveNasPendingJobs(entries);
-        }
-    } catch (_) {
-        // Le prochain réveil réessaiera.
-    }
-
-    if (Object.keys(await loadNasPendingJobs()).length > 0) {
-        await scheduleNasCompletionWatch();
-    }
-}
 
 async function vidaexoRequest(path, options = {}) {
     try {
@@ -964,7 +864,29 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                 }
 
                 if (pendingId && nasPayload?.job) {
-                    await rememberNasPendingJob(nasPayload.job, pendingId);
+                    const attached = await vidaexoRequest("/videos/pending/job", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            pendingId,
+                            nasJobId: nasPayload.job
+                        })
+                    });
+
+                    if (!attached.ok) {
+                        await vidaexoRequest("/videos/pending/cancel", {
+                            method: "POST",
+                            body: JSON.stringify({ pendingId })
+                        });
+
+                        sendResponse({
+                            ok: false,
+                            nasOk: true,
+                            pendingSaved: false,
+                            job: nasPayload.job,
+                            vidaexo: attached
+                        });
+                        return;
+                    }
                 }
 
                 sendResponse({
