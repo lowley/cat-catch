@@ -780,6 +780,9 @@
                     box-shadow: 0 3px 12px rgba(0,0,0,.45);
                     position: relative;
                     user-select: none;
+                    -webkit-user-select: none;
+                    -webkit-touch-callout: none;
+                    touch-action: none;
                 }
 
                 button:active {
@@ -816,8 +819,19 @@
         let nasLongPressTimer = null;
         let nasLongPressTriggered = false;
 
-        nasFabButton.addEventListener("pointerdown", function () {
+        nasFabButton.addEventListener("pointerdown", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
             nasLongPressTriggered = false;
+            clearTimeout(nasLongPressTimer);
+
+            try {
+                nasFabButton.setPointerCapture(event.pointerId);
+            } catch (_) {
+                // Certains moteurs Android peuvent refuser la capture.
+            }
 
             nasLongPressTimer = setTimeout(function () {
                 nasLongPressTriggered = true;
@@ -828,22 +842,40 @@
             }, 700);
         });
 
-        nasFabButton.addEventListener("pointerup", function () {
+        nasFabButton.addEventListener("pointerup", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            clearTimeout(nasLongPressTimer);
+
+            try {
+                if (nasFabButton.hasPointerCapture(event.pointerId)) {
+                    nasFabButton.releasePointerCapture(event.pointerId);
+                }
+            } catch (_) {
+                // Rien à faire.
+            }
+        });
+
+        nasFabButton.addEventListener("pointercancel", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
             clearTimeout(nasLongPressTimer);
         });
 
-        nasFabButton.addEventListener("pointercancel", function () {
-            clearTimeout(nasLongPressTimer);
-        });
-
-        nasFabButton.addEventListener("pointerleave", function () {
-            clearTimeout(nasLongPressTimer);
+        nasFabButton.addEventListener("contextmenu", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
         });
 
         nasFabButton.addEventListener("click", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
             if (nasLongPressTriggered) {
-                event.preventDefault();
-                event.stopPropagation();
                 nasLongPressTriggered = false;
                 return;
             }
