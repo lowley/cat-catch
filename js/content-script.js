@@ -818,20 +818,18 @@
 
         let nasLongPressTimer = null;
         let nasLongPressTriggered = false;
+        let nasTouchGesture = false;
+        let nasSuppressClick = false;
 
-        nasFabButton.addEventListener("pointerdown", function (event) {
+        function nasStopGestureEvent(event) {
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
+        }
 
+        function nasStartLongPress() {
             nasLongPressTriggered = false;
             clearTimeout(nasLongPressTimer);
-
-            try {
-                nasFabButton.setPointerCapture(event.pointerId);
-            } catch (_) {
-                // Certains moteurs Android peuvent refuser la capture.
-            }
 
             nasLongPressTimer = setTimeout(function () {
                 nasLongPressTriggered = true;
@@ -840,13 +838,81 @@
                     Message: "nasOpenStatus"
                 });
             }, 700);
+        }
+
+        function nasEndLongPress() {
+            clearTimeout(nasLongPressTimer);
+            nasLongPressTimer = null;
+        }
+
+        /*
+         * Edge Android gère parfois le long appui tactile en dehors de la
+         * séquence PointerEvent. On intercepte donc explicitement les TouchEvent
+         * en mode non-passif, avant que la page située sous le FAB puisse
+         * recevoir le geste natif.
+         */
+        nasFabButton.addEventListener("touchstart", function (event) {
+            nasStopGestureEvent(event);
+            nasTouchGesture = true;
+            nasSuppressClick = true;
+            nasStartLongPress();
+        }, { capture: true, passive: false });
+
+        nasFabButton.addEventListener("touchend", function (event) {
+            nasStopGestureEvent(event);
+            nasEndLongPress();
+
+            const wasLongPress = nasLongPressTriggered;
+            nasLongPressTriggered = false;
+            nasTouchGesture = false;
+
+            if (!wasLongPress) {
+                toggleNasPanel();
+            }
+
+            setTimeout(function () {
+                nasSuppressClick = false;
+            }, 600);
+        }, { capture: true, passive: false });
+
+        nasFabButton.addEventListener("touchcancel", function (event) {
+            nasStopGestureEvent(event);
+            nasEndLongPress();
+            nasLongPressTriggered = false;
+            nasTouchGesture = false;
+
+            setTimeout(function () {
+                nasSuppressClick = false;
+            }, 600);
+        }, { capture: true, passive: false });
+
+        /*
+         * Souris/stylet : PointerEvent reste utile, mais on ignore ici les
+         * pointeurs tactiles car leur séquence est déjà entièrement traitée
+         * par les TouchEvent ci-dessus.
+         */
+        nasFabButton.addEventListener("pointerdown", function (event) {
+            if (event.pointerType === "touch" || nasTouchGesture) {
+                return;
+            }
+
+            nasStopGestureEvent(event);
+            nasStartLongPress();
+
+            try {
+                nasFabButton.setPointerCapture(event.pointerId);
+            } catch (_) {
+                // Certains moteurs peuvent refuser la capture.
+            }
         });
 
         nasFabButton.addEventListener("pointerup", function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-            clearTimeout(nasLongPressTimer);
+            if (event.pointerType === "touch" || nasTouchGesture) {
+                return;
+            }
+
+            nasStopGestureEvent(event);
+            nasEndLongPress();
 
             try {
                 if (nasFabButton.hasPointerCapture(event.pointerId)) {
@@ -858,22 +924,27 @@
         });
 
         nasFabButton.addEventListener("pointercancel", function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-            clearTimeout(nasLongPressTimer);
+            if (event.pointerType === "touch" || nasTouchGesture) {
+                return;
+            }
+
+            nasStopGestureEvent(event);
+            nasEndLongPress();
+            nasLongPressTriggered = false;
         });
 
         nasFabButton.addEventListener("contextmenu", function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-        });
+            nasStopGestureEvent(event);
+        }, { capture: true });
 
         nasFabButton.addEventListener("click", function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
+            nasStopGestureEvent(event);
+
+            // Un TouchEvent traité ci-dessus peut encore produire un click
+            // synthétique sur certains Chromium Android : on l'avale.
+            if (nasSuppressClick) {
+                return;
+            }
 
             if (nasLongPressTriggered) {
                 nasLongPressTriggered = false;
@@ -881,7 +952,7 @@
             }
 
             toggleNasPanel();
-        });
+        }, { capture: true });
 
         document.documentElement.appendChild(nasFabHost);
     }
