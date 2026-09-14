@@ -763,6 +763,12 @@
 
         shadow.innerHTML = `
             <style>
+                .fab-wrap {
+                    position: relative;
+                    width: 58px;
+                    height: 58px;
+                }
+
                 button {
                     all: initial;
                     box-sizing: border-box;
@@ -789,6 +795,18 @@
                     transform: scale(.94);
                 }
 
+                .gesture-layer {
+                    position: absolute;
+                    inset: 0;
+                    z-index: 10;
+                    border-radius: 50%;
+                    background: transparent;
+                    touch-action: none;
+                    -webkit-user-select: none;
+                    user-select: none;
+                    -webkit-touch-callout: none;
+                }
+
                 .badge {
                     position: absolute;
                     top: -4px;
@@ -807,19 +825,22 @@
                 }
             </style>
 
-            <button type="button" title="Vidéos détectées">
-                🎬
-                <span class="badge">1</span>
-            </button>
+            <div class="fab-wrap">
+                <button type="button" title="Vidéos détectées">
+                    🎬
+                    <span class="badge">1</span>
+                </button>
+                <div class="gesture-layer" aria-hidden="true"></div>
+            </div>
         `;
 
         nasFabButton = shadow.querySelector("button");
         nasFabBadge = shadow.querySelector(".badge");
+        const nasFabGestureLayer = shadow.querySelector(".gesture-layer");
 
         let nasLongPressTimer = null;
         let nasLongPressTriggered = false;
-        let nasTouchGesture = false;
-        let nasSuppressClick = false;
+        let nasTouchActive = false;
 
         function nasStopGestureEvent(event) {
             event.preventDefault();
@@ -845,113 +866,62 @@
             nasLongPressTimer = null;
         }
 
-        /*
-         * Edge Android gère parfois le long appui tactile en dehors de la
-         * séquence PointerEvent. On intercepte donc explicitement les TouchEvent
-         * en mode non-passif, avant que la page située sous le FAB puisse
-         * recevoir le geste natif.
-         */
-        nasFabButton.addEventListener("touchstart", function (event) {
+        nasFabGestureLayer.addEventListener("touchstart", function (event) {
             nasStopGestureEvent(event);
-            nasTouchGesture = true;
-            nasSuppressClick = true;
+            nasTouchActive = true;
             nasStartLongPress();
         }, { capture: true, passive: false });
 
-        nasFabButton.addEventListener("touchend", function (event) {
+        nasFabGestureLayer.addEventListener("touchend", function (event) {
             nasStopGestureEvent(event);
             nasEndLongPress();
-
             const wasLongPress = nasLongPressTriggered;
             nasLongPressTriggered = false;
-            nasTouchGesture = false;
-
-            if (!wasLongPress) {
-                toggleNasPanel();
-            }
-
-            setTimeout(function () {
-                nasSuppressClick = false;
-            }, 600);
+            nasTouchActive = false;
+            if (!wasLongPress) toggleNasPanel();
         }, { capture: true, passive: false });
 
-        nasFabButton.addEventListener("touchcancel", function (event) {
+        nasFabGestureLayer.addEventListener("touchcancel", function (event) {
             nasStopGestureEvent(event);
             nasEndLongPress();
             nasLongPressTriggered = false;
-            nasTouchGesture = false;
-
-            setTimeout(function () {
-                nasSuppressClick = false;
-            }, 600);
+            nasTouchActive = false;
         }, { capture: true, passive: false });
 
-        /*
-         * Souris/stylet : PointerEvent reste utile, mais on ignore ici les
-         * pointeurs tactiles car leur séquence est déjà entièrement traitée
-         * par les TouchEvent ci-dessus.
-         */
-        nasFabButton.addEventListener("pointerdown", function (event) {
-            if (event.pointerType === "touch" || nasTouchGesture) {
-                return;
-            }
-
+        nasFabGestureLayer.addEventListener("pointerdown", function (event) {
+            if (event.pointerType === "touch" || nasTouchActive) return;
             nasStopGestureEvent(event);
             nasStartLongPress();
-
-            try {
-                nasFabButton.setPointerCapture(event.pointerId);
-            } catch (_) {
-                // Certains moteurs peuvent refuser la capture.
-            }
+            try { nasFabGestureLayer.setPointerCapture(event.pointerId); } catch (_) {}
         });
 
-        nasFabButton.addEventListener("pointerup", function (event) {
-            if (event.pointerType === "touch" || nasTouchGesture) {
-                return;
-            }
-
+        nasFabGestureLayer.addEventListener("pointerup", function (event) {
+            if (event.pointerType === "touch" || nasTouchActive) return;
             nasStopGestureEvent(event);
             nasEndLongPress();
-
+            const wasLongPress = nasLongPressTriggered;
+            nasLongPressTriggered = false;
             try {
-                if (nasFabButton.hasPointerCapture(event.pointerId)) {
-                    nasFabButton.releasePointerCapture(event.pointerId);
+                if (nasFabGestureLayer.hasPointerCapture(event.pointerId)) {
+                    nasFabGestureLayer.releasePointerCapture(event.pointerId);
                 }
-            } catch (_) {
-                // Rien à faire.
-            }
+            } catch (_) {}
+            if (!wasLongPress) toggleNasPanel();
         });
 
-        nasFabButton.addEventListener("pointercancel", function (event) {
-            if (event.pointerType === "touch" || nasTouchGesture) {
-                return;
-            }
-
+        nasFabGestureLayer.addEventListener("pointercancel", function (event) {
+            if (event.pointerType === "touch" || nasTouchActive) return;
             nasStopGestureEvent(event);
             nasEndLongPress();
             nasLongPressTriggered = false;
         });
 
-        nasFabButton.addEventListener("contextmenu", function (event) {
+        nasFabGestureLayer.addEventListener("contextmenu", function (event) {
             nasStopGestureEvent(event);
         }, { capture: true });
 
-        nasFabButton.addEventListener("click", function (event) {
+        nasFabGestureLayer.addEventListener("click", function (event) {
             nasStopGestureEvent(event);
-
-            // Un TouchEvent traité ci-dessus peut encore produire un click
-            // synthétique sur certains Chromium Android : on l'avale.
-            if (nasSuppressClick) {
-                return;
-            }
-
-            if (nasLongPressTriggered) {
-                nasLongPressTriggered = false;
-                return;
-            }
-
-            toggleNasPanel();
         }, { capture: true });
 
         document.documentElement.appendChild(nasFabHost);
