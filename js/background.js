@@ -76,6 +76,10 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
         (chrome.storage.session ?? chrome.storage.local).set({MediaData: cacheData});
         return;
     }
+    if (alarm.name === NAS_COMPLETION_ALARM) {
+        pollNasCompletion();
+        return;
+    }
 });
 
 async function nasParseMaster(info) {
@@ -573,6 +577,103 @@ function save(tabId) {
  * 监听 扩展 message 事件
  */
 const VIDAEXO_BASE_URL = "http://127.0.0.1:8765";
+const NAS_BASE_URL = "http://10.0.0.1:9876";
+const NAS_COMPLETION_ALARM = "vidaexoNasCompletionWatch";
+const NAS_PENDING_JOBS_KEY = "vidaexoNasPendingJobs";
+
+async function loadNasPendingJobs() {
+    const data = await chrome.storage.session.get(NAS_PENDING_JOBS_KEY);
+    return data[NAS_PENDING_JOBS_KEY] || {};
+}
+
+async function saveNasPendingJobs(entries) {
+    await chrome.storage.session.set({
+        [NAS_PENDING_JOBS_KEY]: entries
+    });
+}
+
+async function scheduleNasCompletionWatch() {
+    chrome.alarms.create(NAS_COMPLETION_ALARM, {
+        when: Date.now() + 5000
+    });
+}
+
+async function rememberNasPendingJob(jobId, pendingId) {
+    const entries = await loadNasPendingJobs();
+    entries[jobId] = { pendingId };
+    await saveNasPendingJobs(entries);
+    await scheduleNasCompletionWatch();
+}
+
+async function pollNasCompletion() {
+    const entries = await loadNasPendingJobs();
+    const jobIds = Object.keys(entries);
+
+    if (jobIds.length === 0) {
+        chrome.alarms.clear(NAS_COMPLETION_ALARM);
+        return;
+    }
+
+    try {
+        const response = await fetch(NAS_BASE_URL + "/api/status", {
+            cache: "no-store"
+        });
+
+        if (!response.ok) {
+            await scheduleNasCompletionWatch();
+            return;
+        }
+
+        const payload = await response.json();
+        const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+        let changed = false;
+
+        for (const jobId of jobIds) {
+            const tracked = entries[jobId];
+            const job = jobs.find(item => item?.id === jobId);
+
+            if (!job) {
+                continue;
+            }
+
+            if (job.status === "done") {
+                const completed = await vidaexoRequest("/videos/complete", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        pendingId: tracked.pendingId,
+                        nasPath: job.output || "",
+                        currentFilename: job.file || ""
+                    })
+                });
+
+                if (completed.ok) {
+                    delete entries[jobId];
+                    changed = true;
+                }
+            } else if (job.status === "error") {
+                await vidaexoRequest("/videos/pending/cancel", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        pendingId: tracked.pendingId
+                    })
+                });
+
+                delete entries[jobId];
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            await saveNasPendingJobs(entries);
+        }
+    } catch (_) {
+        // Le prochain réveil réessaiera.
+    }
+
+    if (Object.keys(await loadNasPendingJobs()).length > 0) {
+        await scheduleNasCompletionWatch();
+    }
+}
 
 async function vidaexoRequest(path, options = {}) {
     try {
@@ -774,41 +875,93 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
     Message.tabId = Message.tabId ?? G.tabId;
 
     if (Message.Message === "nasSendToServer") {
-        fetch("http://10.0.0.1:9876/download", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(Message.data)
-        })
-            .then(async response => {
-                const text = await response.text();
-                let vidaexo = null;
+        (async () => {
+            let pendingId = null;
 
-                if (response.ok && Message.videoRecord) {
-                    vidaexo = await vidaexoRequest("/videos/register", {
+            if (Message.pendingVideo) {
+                const pending = await vidaexoRequest("/videos/pending", {
+                    method: "POST",
+                    body: JSON.stringify(Message.pendingVideo)
+                });
+
+                if (!pending.ok || !pending.data?.id) {
+                    sendResponse({
+                        ok: false,
+                        nasOk: false,
+                        pendingSaved: false,
+                        vidaexo: pending
+                    });
+                    return;
+                }
+
+                pendingId = pending.data.id;
+            }
+
+            try {
+                const response = await fetch(NAS_BASE_URL + "/download", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(Message.data)
+                });
+
+                const text = await response.text();
+                let nasPayload = null;
+
+                try {
+                    nasPayload = JSON.parse(text);
+                } catch (_) {
+                    nasPayload = null;
+                }
+
+                if (!response.ok) {
+                    if (pendingId) {
+                        await vidaexoRequest("/videos/pending/cancel", {
+                            method: "POST",
+                            body: JSON.stringify({ pendingId })
+                        });
+                    }
+
+                    sendResponse({
+                        ok: false,
+                        nasOk: false,
+                        pendingSaved: Boolean(pendingId),
+                        status: response.status,
+                        text
+                    });
+                    return;
+                }
+
+                if (pendingId && nasPayload?.job) {
+                    await rememberNasPendingJob(nasPayload.job, pendingId);
+                }
+
+                sendResponse({
+                    ok: true,
+                    nasOk: true,
+                    pendingSaved: Boolean(pendingId),
+                    pendingId,
+                    job: nasPayload?.job || null,
+                    status: response.status,
+                    text
+                });
+            } catch (error) {
+                if (pendingId) {
+                    await vidaexoRequest("/videos/pending/cancel", {
                         method: "POST",
-                        body: JSON.stringify(Message.videoRecord)
+                        body: JSON.stringify({ pendingId })
                     });
                 }
 
                 sendResponse({
-                    ok: response.ok && (!Message.videoRecord || vidaexo?.ok === true),
-                    nasOk: response.ok,
-                    metadataSaved: !Message.videoRecord || vidaexo?.ok === true,
-                    status: response.status,
-                    text: text,
-                    vidaexo: vidaexo
-                });
-            })
-            .catch(error => {
-                sendResponse({
                     ok: false,
                     nasOk: false,
-                    metadataSaved: false,
+                    pendingSaved: false,
                     error: String(error)
                 });
-            });
+            }
+        })();
 
         return true;
     }
