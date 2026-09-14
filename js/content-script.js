@@ -437,6 +437,7 @@
 
             let success = 0;
             let errors = 0;
+            let firstError = null;
 
             const promises = [];
 
@@ -475,6 +476,22 @@
                             function (response) {
                                 if (chrome.runtime.lastError || !response?.ok) {
                                     errors++;
+
+                                    if (!firstError) {
+                                        if (chrome.runtime.lastError) {
+                                            firstError = {
+                                                stage: "EXTENSION",
+                                                status: 0,
+                                                error: chrome.runtime.lastError.message || "NO_RESPONSE"
+                                            };
+                                        } else {
+                                            firstError = {
+                                                stage: response?.stage || "UNKNOWN",
+                                                status: response?.status ?? 0,
+                                                error: response?.error || "UNKNOWN_ERROR"
+                                            };
+                                        }
+                                    }
                                 } else {
                                     success++;
                                 }
@@ -503,7 +520,12 @@
                 send.disabled = false;
 
             } else {
-                send.textContent = "✕ ERREUR";
+                const stage = String(firstError?.stage || "ERREUR");
+                const status = Number(firstError?.status || 0);
+                const detail = String(firstError?.error || "").trim();
+
+                send.textContent = "✕ " + stage + (status ? " " + status : "");
+                send.title = detail;
                 send.disabled = false;
             }
         });
