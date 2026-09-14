@@ -449,6 +449,11 @@
 
                 promises.push(
                     new Promise(function (resolve) {
+                        const baseName = String(video.title || document.title || "video").trim() || "video";
+                        const initialName = /\.[A-Za-z0-9]{2,5}$/.test(baseName)
+                            ? baseName
+                            : baseName + ".mp4";
+
                         chrome.runtime.sendMessage(
                             {
                                 Message: "nasSendToServer",
@@ -458,8 +463,13 @@
                                     cookie: video.cookie || "",
                                     userAgent: navigator.userAgent,
                                     title: video.title || "Vidéo",
-                                    filename: video.title || "video",
+                                    filename: initialName,
                                     duration: video.duration || null,
+                                },
+                                namingRequest: {
+                                    html: document.documentElement.outerHTML,
+                                    initialName: initialName,
+                                    sourceUrl: location.href
                                 }
                             },
                             function (response) {
