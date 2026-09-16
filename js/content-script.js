@@ -1058,16 +1058,61 @@
                 return true;
             }
 
-            nasVideos.set(Message.masterUrl, {
-                title: Message.title || "Vidéo",
-                type: "HLS",
-                masterUrl: Message.masterUrl,
-                variants: Message.variants || [],
-                duration: Message.duration || null,
-                selected: -1,
-                referer: Message.referer || "",
-                cookie: Message.cookie || "",
-            });
+            const incomingTitle = Message.title || "Vidéo";
+            const incomingDuration = Number(Message.duration) || null;
+            const incomingVariants = Message.variants || [];
+
+            let existingKey = null;
+            let existingVideo = null;
+
+            for (const [key, video] of nasVideos) {
+                const sameTitle = video.title === incomingTitle;
+                const existingDuration = Number(video.duration) || null;
+                const sameDuration =
+                    incomingDuration !== null &&
+                    existingDuration !== null &&
+                    Math.abs(existingDuration - incomingDuration) <= 2;
+
+                if (sameTitle && sameDuration) {
+                    existingKey = key;
+                    existingVideo = video;
+                    break;
+                }
+            }
+
+            if (existingVideo) {
+                const knownUrls = new Set(existingVideo.variants.map(variant => variant.url));
+
+                for (const variant of incomingVariants) {
+                    if (variant.url && !knownUrls.has(variant.url)) {
+                        existingVideo.variants.push(variant);
+                        knownUrls.add(variant.url);
+                    }
+                }
+
+                if (!existingVideo.referer && Message.referer) {
+                    existingVideo.referer = Message.referer;
+                }
+                if (!existingVideo.cookie && Message.cookie) {
+                    existingVideo.cookie = Message.cookie;
+                }
+                if (!existingVideo.duration && incomingDuration) {
+                    existingVideo.duration = incomingDuration;
+                }
+
+                nasVideos.set(existingKey, existingVideo);
+            } else {
+                nasVideos.set(Message.masterUrl, {
+                    title: incomingTitle,
+                    type: "HLS",
+                    masterUrl: Message.masterUrl,
+                    variants: incomingVariants,
+                    duration: incomingDuration,
+                    selected: -1,
+                    referer: Message.referer || "",
+                    cookie: Message.cookie || "",
+                });
+            }
 
             applyNasDefaultSelections();
             updateNasFabCount();
