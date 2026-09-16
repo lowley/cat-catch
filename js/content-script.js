@@ -1058,15 +1058,17 @@
                 return true;
             }
 
+            const existingVideo = nasVideos.get(Message.masterUrl);
+
             nasVideos.set(Message.masterUrl, {
-                title: Message.title || "Vidéo",
+                title: existingVideo?.title || Message.title || "Vidéo",
                 type: "HLS",
                 masterUrl: Message.masterUrl,
                 variants: Message.variants || [],
-                duration: Message.duration || null,
-                selected: -1,
-                referer: Message.referer || "",
-                cookie: Message.cookie || "",
+                duration: Message.duration || existingVideo?.duration || null,
+                selected: existingVideo?.selected ?? -1,
+                referer: Message.referer || existingVideo?.referer || "",
+                cookie: Message.cookie || existingVideo?.cookie || "",
             });
 
             applyNasDefaultSelections();
