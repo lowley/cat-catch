@@ -396,6 +396,15 @@
         return count;
     }
 
+    function cleanNasTitle(value) {
+        const title = String(value || "Vidéo").trim();
+
+        // HotMovies peut ajouter plusieurs fois le marqueur "(1)"
+        // à la fin du titre de l'onglet pendant la lecture.
+        // On enlève uniquement cette série terminale.
+        return title.replace(/(?:\\s+\\(1\\))+\\s*$/, "").trim() || "Vidéo";
+    }
+
     function renderNasPanel() {
         if (!nasPanel) {
             return;
@@ -1061,7 +1070,7 @@
             const existingVideo = nasVideos.get(Message.masterUrl);
 
             nasVideos.set(Message.masterUrl, {
-                title: existingVideo?.title || Message.title || "Vidéo",
+                title: cleanNasTitle(existingVideo?.title || Message.title || "Vidéo"),
                 type: "HLS",
                 masterUrl: Message.masterUrl,
                 variants: Message.variants || [],
