@@ -396,15 +396,6 @@
         return count;
     }
 
-    function cleanNasTitle(value) {
-        const title = String(value || "Vidéo").trim();
-
-        // HotMovies peut ajouter plusieurs fois le marqueur "(1)"
-        // à la fin du titre de l'onglet pendant la lecture.
-        // On enlève uniquement cette série terminale.
-        return title.replace(/(?:\\s+\\(1\\))+\\s*$/, "").trim() || "Vidéo";
-    }
-
     function renderNasPanel() {
         if (!nasPanel) {
             return;
@@ -1067,17 +1058,15 @@
                 return true;
             }
 
-            const existingVideo = nasVideos.get(Message.masterUrl);
-
             nasVideos.set(Message.masterUrl, {
-                title: cleanNasTitle(existingVideo?.title || Message.title || "Vidéo"),
+                title: Message.title || "Vidéo",
                 type: "HLS",
                 masterUrl: Message.masterUrl,
                 variants: Message.variants || [],
-                duration: Message.duration || existingVideo?.duration || null,
-                selected: existingVideo?.selected ?? -1,
-                referer: Message.referer || existingVideo?.referer || "",
-                cookie: Message.cookie || existingVideo?.cookie || "",
+                duration: Message.duration || null,
+                selected: -1,
+                referer: Message.referer || "",
+                cookie: Message.cookie || "",
             });
 
             applyNasDefaultSelections();
