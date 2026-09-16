@@ -717,6 +717,12 @@
             radio.checked = video.selected === index;
 
             radio.addEventListener("change", function () {
+                // Une seule variante peut être sélectionnée sur l'ensemble
+                // des candidats vidéo affichés.
+                for (const otherVideo of nasVideos.values()) {
+                    otherVideo.selected = -1;
+                }
+
                 video.selected = index;
                 renderNasPanel();
             });
