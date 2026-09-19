@@ -427,6 +427,42 @@
         return imageCandidates[0]?.src || null;
     }
 
+    async function nasDownloadCoverBase64(url) {
+        if (!url) {
+            return null;
+        }
+
+        try {
+            const response = await fetch(url, {
+                method: "GET",
+                credentials: "include",
+                cache: "force-cache"
+            });
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const blob = await response.blob();
+            if (!blob.type.startsWith("image/")) {
+                return null;
+            }
+
+            return await new Promise(function (resolve) {
+                const reader = new FileReader();
+                reader.onload = function () {
+                    const dataUrl = String(reader.result || "");
+                    const comma = dataUrl.indexOf(",");
+                    resolve(comma >= 0 ? dataUrl.substring(comma + 1) : null);
+                };
+                reader.onerror = function () { resolve(null); };
+                reader.readAsDataURL(blob);
+            });
+        } catch (_) {
+            return null;
+        }
+    }
+
     function getNasSelectedCount() {
         let count = 0;
 
@@ -482,6 +518,8 @@
             let errors = 0;
             let firstError = null;
 
+            const coverUrl = nasExtractHotMoviesCoverUrl();
+            const coverBase64 = await nasDownloadCoverBase64(coverUrl);
             const promises = [];
 
             for (const video of nasVideos.values()) {
@@ -514,7 +552,8 @@
                                     html: document.documentElement.outerHTML,
                                     initialName: initialName,
                                     sourceUrl: location.href,
-                                    coverUrl: nasExtractHotMoviesCoverUrl()
+                                    coverUrl: coverUrl,
+                                    coverBase64: coverBase64
                                 }
                             },
                             function (response) {
