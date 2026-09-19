@@ -805,6 +805,7 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
 
                 pendingVideo = {
                     sourceUrl: Message.namingRequest.sourceUrl || null,
+                    coverUrl: Message.namingRequest.coverUrl || null,
                     originalFilename: Message.namingRequest.initialName,
                     targetName: naming.data.targetName,
                     catalogEntities: naming.data.catalogEntities || []
