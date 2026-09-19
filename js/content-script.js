@@ -384,6 +384,49 @@
         renderNasPanel();
     }
 
+    function nasExtractHotMoviesCoverUrl() {
+        const selectors = [
+            'meta[property="og:image:secure_url"]',
+            'meta[property="og:image"]',
+            'meta[name="twitter:image"]',
+            'meta[name="twitter:image:src"]',
+            'link[rel="image_src"]'
+        ];
+
+        for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            const raw = element?.getAttribute("content") || element?.getAttribute("href") || "";
+            if (!raw.trim()) {
+                continue;
+            }
+
+            try {
+                const absolute = new URL(raw.trim(), location.href);
+                if (absolute.protocol === "https:" || absolute.protocol === "http:") {
+                    return absolute.href;
+                }
+            } catch (_) {
+                // Ignore malformed candidates and continue with the next selector.
+            }
+        }
+
+        const imageCandidates = Array.from(document.images)
+            .map(function (image) {
+                const src = image.currentSrc || image.src || "";
+                const width = Number(image.naturalWidth || image.width || 0);
+                const height = Number(image.naturalHeight || image.height || 0);
+                return { src, area: width * height };
+            })
+            .filter(function (candidate) {
+                return candidate.src && /^https?:/i.test(candidate.src);
+            })
+            .sort(function (a, b) {
+                return b.area - a.area;
+            });
+
+        return imageCandidates[0]?.src || null;
+    }
+
     function getNasSelectedCount() {
         let count = 0;
 
@@ -470,7 +513,8 @@
                                 namingRequest: {
                                     html: document.documentElement.outerHTML,
                                     initialName: initialName,
-                                    sourceUrl: location.href
+                                    sourceUrl: location.href,
+                                    coverUrl: nasExtractHotMoviesCoverUrl()
                                 }
                             },
                             function (response) {
