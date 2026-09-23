@@ -898,7 +898,20 @@
 
             const sameSource = Array.isArray(d.sameSourceCandidates) ? d.sameSourceCandidates : [];
             const sameName = Array.isArray(d.sameFilenameCandidates) ? d.sameFilenameCandidates : [];
+            const looseTitle = Array.isArray(d.looseTitleCandidates) ? d.looseTitleCandidates : [];
             const matches = Array.isArray(d.matches) ? d.matches : [];
+
+            lines.push("", "VIDEORECORDS CHARGÉS: " + String(d.recordCount ?? "?"));
+            lines.push("", "CANDIDATS TITRE APPROCHANT: " + looseTitle.length);
+            looseTitle.forEach((item, index) => {
+                lines.push(
+                    "  [" + (index + 1) + "] " + (item.currentFilename || item.originalFilename || ""),
+                    "      clé nom=" + (item.filenameTitleKey || ""),
+                    "      originalFilename=" + (item.originalFilename || ""),
+                    "      sourceUrl=" + (item.sourceUrl || ""),
+                    "      nasPath=" + (item.nasPath || "")
+                );
+            });
 
             lines.push("", "MATCH COMPLET: " + matches.length);
             matches.forEach((item, index) => {
