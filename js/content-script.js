@@ -464,9 +464,20 @@
     }
 
     function getNasSourceUrl() {
+        const current = new URL(location.href);
+
+        // On HotMovies the identity of a movie page is its real path.
+        // Do not trust rel=canonical / og:url here: they may be generic.
+        if (
+            current.hostname === "www.hotmovies.com" &&
+            /^\/\d+\/[^/]+\.html$/i.test(current.pathname)
+        ) {
+            return current.origin + current.pathname;
+        }
+
         const canonical = document.querySelector('link[rel="canonical"]')?.href || "";
         const ogUrl = document.querySelector('meta[property="og:url"]')?.content || "";
-        return String(canonical || ogUrl || location.href).trim();
+        return String(canonical || ogUrl || current.href).trim();
     }
 
     function nasInitialFilename(video) {
