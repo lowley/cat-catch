@@ -653,7 +653,8 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         vidaexoRequest("/videos/presence", {
             method: "POST",
             body: JSON.stringify({
-                sourceUrl: Message.sourceUrl || ""
+                sourceUrl: Message.sourceUrl || "",
+                originalFilename: Message.originalFilename || ""
             })
         }).then(sendResponse);
         return true;
