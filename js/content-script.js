@@ -906,7 +906,10 @@
                 "URL reçue: " + (d.requestedSourceUrl || ""),
                 "URL normalisée: " + (d.normalizedRequestedSourceUrl || ""),
                 "Nom reçu: " + (d.requestedOriginalFilename || ""),
-                "Nom normalisé: " + (d.normalizedRequestedOriginalFilename || "")
+                "Nom normalisé: " + (d.normalizedRequestedOriginalFilename || ""),
+                "Clé depuis URL: " + (d.requestedUrlTitleKey || ""),
+                "Clé depuis nom: " + (d.requestedFilenameTitleKey || ""),
+                "Clé utilisée: " + (d.requestedTitleKey || "")
             ];
 
             const sameSource = Array.isArray(d.sameSourceCandidates) ? d.sameSourceCandidates : [];
@@ -917,6 +920,8 @@
             matches.forEach((item, index) => {
                 lines.push(
                     "  [" + (index + 1) + "] " + (item.currentFilename || item.originalFilename || ""),
+                    "      clé nom=" + (item.filenameTitleKey || ""),
+                    "      clé URL=" + (item.sourceTitleKey || ""),
                     "      sourceUrl=" + (item.sourceUrl || ""),
                     "      nasPath=" + (item.nasPath || "")
                 );
