@@ -1134,6 +1134,7 @@
 
     function showNasFab(media) {
         createNasFab();
+        checkNasVideoPresence();
 
         const key = media.requestId || media.url;
         nasMedia.set(key, media);
