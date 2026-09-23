@@ -9,6 +9,9 @@
     let nasFabButton = null;
     let nasFabBadge = null;
     let nasPanel = null;
+    let nasPresenceStatus = "unknown";
+    let nasPresenceCheckedUrl = null;
+    let nasPresenceCheckInProgress = false;
     const nasVideos = new Map();
     const nasIsTopFrame = window.top === window;
     const nasIsStatusPage =
@@ -463,6 +466,66 @@
         }
     }
 
+    function updateNasPresenceLamp() {
+        if (!nasPanel) return;
+
+        const lamp = nasPanel.querySelector("[data-nas-presence-lamp]");
+        if (!lamp) return;
+
+        if (nasPresenceStatus === "present") {
+            lamp.style.opacity = "1";
+            lamp.style.filter = "none";
+            lamp.style.textShadow = "0 0 8px rgba(255, 220, 80, .9)";
+            lamp.title = "Cette vidéo est déjà présente dans Vidaexo.";
+            return;
+        }
+
+        lamp.style.opacity = nasPresenceStatus === "checking" ? ".45" : ".22";
+        lamp.style.filter = "grayscale(1)";
+        lamp.style.textShadow = "none";
+        lamp.title = nasPresenceStatus === "error"
+            ? "Impossible de vérifier la présence dans Vidaexo."
+            : nasPresenceStatus === "checking"
+                ? "Vérification dans Vidaexo…"
+                : "Cette vidéo n’est pas présente dans Vidaexo.";
+    }
+
+    function checkNasVideoPresence() {
+        if (!nasIsTopFrame || nasPresenceCheckInProgress) return;
+
+        const sourceUrl = location.href;
+        if (nasPresenceCheckedUrl === sourceUrl && nasPresenceStatus !== "unknown") {
+            updateNasPresenceLamp();
+            return;
+        }
+
+        nasPresenceCheckedUrl = sourceUrl;
+        nasPresenceCheckInProgress = true;
+        nasPresenceStatus = "checking";
+        updateNasPresenceLamp();
+
+        chrome.runtime.sendMessage(
+            {
+                Message: "vidaexoVideoPresence",
+                sourceUrl: sourceUrl
+            },
+            function (response) {
+                nasPresenceCheckInProgress = false;
+
+                if (chrome.runtime.lastError || !response?.ok) {
+                    nasPresenceStatus = "error";
+                    updateNasPresenceLamp();
+                    return;
+                }
+
+                nasPresenceStatus = response?.data?.present === true
+                    ? "present"
+                    : "absent";
+                updateNasPresenceLamp();
+            }
+        );
+    }
+
     function getNasSelectedCount() {
         let count = 0;
 
@@ -492,10 +555,24 @@
         header.style.justifyContent = "space-between";
         header.style.alignItems = "center";
 
+        const headingGroup = document.createElement("div");
+        headingGroup.style.display = "flex";
+        headingGroup.style.alignItems = "center";
+        headingGroup.style.gap = "8px";
+
         const heading = document.createElement("div");
         heading.textContent = "Vidéos détectées";
         heading.style.fontSize = "18px";
         heading.style.fontWeight = "bold";
+
+        const presenceLamp = document.createElement("span");
+        presenceLamp.textContent = "💡";
+        presenceLamp.setAttribute("data-nas-presence-lamp", "true");
+        presenceLamp.setAttribute("aria-label", "Présence dans Vidaexo");
+        presenceLamp.style.fontSize = "20px";
+        presenceLamp.style.lineHeight = "1";
+        presenceLamp.style.transition = "opacity .15s ease, filter .15s ease, text-shadow .15s ease";
+        headingGroup.append(heading, presenceLamp);
 
         const send = document.createElement("button");
         send.textContent = "SEND " + getNasSelectedCount() + "/" + nasVideos.size;
@@ -505,6 +582,9 @@
         send.style.fontWeight = "bold";
         send.style.fontSize = "14px";
         send.style.cursor = "pointer";
+
+        updateNasPresenceLamp();
+        checkNasVideoPresence();
 
         send.addEventListener("click", async function () {
             if (send.disabled) {
