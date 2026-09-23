@@ -9,6 +9,8 @@
     let nasFabButton = null;
     let nasFabBadge = null;
     let nasPanel = null;
+    let nasPagePresenceState = "unknown";
+    let nasPagePresenceCacheKey = null;
     const nasVideos = new Map();
     const nasIsTopFrame = window.top === window;
     const nasIsStatusPage =
@@ -354,6 +356,7 @@
             createNasStatusBackButton();
         } else {
             prepareNasFab();
+            checkNasPagePresence();
             nasLoadHotMoviesPlayerInBackground();
         }
     }
@@ -490,15 +493,54 @@
     function updateNasFabPresence() {
         if (!nasFabButton) return;
 
-        const present = Array.from(nasVideos.values()).some(function (video) {
-            return video.presenceState === "present";
-        });
+        const present =
+            nasPagePresenceState === "present" ||
+            Array.from(nasVideos.values()).some(function (video) {
+                return video.presenceState === "present";
+            });
 
         nasFabButton.style.background = present ? "#f2c500" : "#222";
         nasFabButton.style.color = present ? "#111" : "white";
         nasFabButton.title = present
             ? "Vidéo déjà présente dans Vidaexo"
             : "Vidéos détectées";
+    }
+
+    function checkNasPagePresence(force = false) {
+        if (!nasIsTopFrame) return;
+
+        const sourceUrl = getNasSourceUrl();
+        const originalFilename = nasInitialFilename({ title: document.title });
+        const cacheKey = sourceUrl + "\n" + originalFilename;
+
+        if (!force && nasPagePresenceCacheKey === cacheKey && nasPagePresenceState !== "unknown") {
+            updateNasFabPresence();
+            return;
+        }
+
+        nasPagePresenceCacheKey = cacheKey;
+        nasPagePresenceState = "checking";
+        updateNasFabPresence();
+
+        chrome.runtime.sendMessage(
+            {
+                Message: "vidaexoVideoPresence",
+                sourceUrl: sourceUrl,
+                originalFilename: originalFilename
+            },
+            function (response) {
+                if (chrome.runtime.lastError || !response?.ok) {
+                    nasPagePresenceState = "error";
+                    updateNasFabPresence();
+                    return;
+                }
+
+                nasPagePresenceState = response?.data?.present === true
+                    ? "present"
+                    : "absent";
+                updateNasFabPresence();
+            }
+        );
     }
 
     function checkNasVideoPresence(video) {
@@ -1241,6 +1283,8 @@
     function resetNasPage() {
         nasMedia.clear();
         nasVideos.clear();
+        nasPagePresenceState = "unknown";
+        nasPagePresenceCacheKey = null;
 
         if (nasPanel) {
             nasPanel.remove();
@@ -1269,6 +1313,7 @@
 
         nasFabBadge.textContent = nasMedia.size;
         nasFabHost.style.display = "block";
+        checkNasPagePresence();
         updateNasFabPresence();
     }
 
@@ -1370,6 +1415,11 @@
 
             applyNasDefaultSelections();
             updateNasFabCount();
+
+            const detectedVideo = nasVideos.get(Message.masterUrl);
+            if (detectedVideo) {
+                checkNasVideoPresence(detectedVideo);
+            }
 
             if (nasPanel) {
                 renderNasPanel();
