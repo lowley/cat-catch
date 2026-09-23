@@ -649,6 +649,16 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         return true;
     }
 
+    if (Message.Message === "vidaexoVideoPresence") {
+        vidaexoRequest("/videos/presence", {
+            method: "POST",
+            body: JSON.stringify({
+                sourceUrl: Message.sourceUrl || ""
+            })
+        }).then(sendResponse);
+        return true;
+    }
+
     if (Message.Message === "newTabGetBookmarks") {
         chrome.bookmarks.getTree().then(
             tree => sendResponse({ ok: true, tree }),
