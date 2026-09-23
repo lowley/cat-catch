@@ -531,14 +531,30 @@
             function (response) {
                 if (chrome.runtime.lastError || !response?.ok) {
                     video.presenceState = "error";
+                    video.presenceDiagnostic = {
+                        error: chrome.runtime.lastError?.message || response?.error || response?.data?.error || "UNKNOWN_ERROR",
+                        sentSourceUrl: sourceUrl,
+                        sentOriginalFilename: originalFilename
+                    };
                     renderNasVideoPresenceLamp(lamp, "error");
+                    if (typeof video.refreshPresenceDiagnostic === "function") {
+                        video.refreshPresenceDiagnostic();
+                    }
                     return;
                 }
 
                 video.presenceState = response?.data?.present === true
                     ? "present"
                     : "absent";
+                video.presenceDiagnostic = {
+                    sentSourceUrl: sourceUrl,
+                    sentOriginalFilename: originalFilename,
+                    ...(response?.data || {})
+                };
                 renderNasVideoPresenceLamp(lamp, video.presenceState);
+                if (typeof video.refreshPresenceDiagnostic === "function") {
+                    video.refreshPresenceDiagnostic();
+                }
             }
         );
     }
@@ -843,10 +859,111 @@
         badge.style.borderRadius = "8px";
         badge.style.background = "#444";
 
+        const diagnosticButton = document.createElement("button");
+        diagnosticButton.type = "button";
+        diagnosticButton.textContent = "DIAG";
+        diagnosticButton.style.border = "1px solid #555";
+        diagnosticButton.style.borderRadius = "7px";
+        diagnosticButton.style.padding = "3px 6px";
+        diagnosticButton.style.background = "#191919";
+        diagnosticButton.style.color = "#ddd";
+        diagnosticButton.style.fontSize = "10px";
+        diagnosticButton.style.cursor = "pointer";
+
+        const diagnosticPanel = document.createElement("pre");
+        diagnosticPanel.style.display = video.presenceDiagnosticOpen ? "block" : "none";
+        diagnosticPanel.style.margin = "8px 0";
+        diagnosticPanel.style.padding = "9px";
+        diagnosticPanel.style.background = "#0d0d0d";
+        diagnosticPanel.style.border = "1px solid #444";
+        diagnosticPanel.style.borderRadius = "8px";
+        diagnosticPanel.style.color = "#d7f7ff";
+        diagnosticPanel.style.fontSize = "11px";
+        diagnosticPanel.style.lineHeight = "1.35";
+        diagnosticPanel.style.whiteSpace = "pre-wrap";
+        diagnosticPanel.style.wordBreak = "break-word";
+        diagnosticPanel.style.maxHeight = "230px";
+        diagnosticPanel.style.overflow = "auto";
+
+        function diagnosticText() {
+            const d = video.presenceDiagnostic;
+            if (!d) {
+                return [
+                    "CatCatch URL: " + getNasSourceUrl(),
+                    "CatCatch nom: " + nasInitialFilename(video),
+                    "",
+                    "Vidaexo: vérification en cours…"
+                ].join("\n");
+            }
+
+            const lines = [
+                "CATCATCH",
+                "URL envoyée: " + (d.sentSourceUrl || ""),
+                "Nom envoyé: " + (d.sentOriginalFilename || ""),
+                "",
+                "VIDAEXO",
+                "present: " + String(d.present ?? false),
+                "URL reçue: " + (d.requestedSourceUrl || ""),
+                "URL normalisée: " + (d.normalizedRequestedSourceUrl || ""),
+                "Nom reçu: " + (d.requestedOriginalFilename || ""),
+                "Nom normalisé: " + (d.normalizedRequestedOriginalFilename || "")
+            ];
+
+            const sameSource = Array.isArray(d.sameSourceCandidates) ? d.sameSourceCandidates : [];
+            const sameName = Array.isArray(d.sameFilenameCandidates) ? d.sameFilenameCandidates : [];
+            const matches = Array.isArray(d.matches) ? d.matches : [];
+
+            lines.push("", "MATCH COMPLET: " + matches.length);
+            matches.forEach((item, index) => {
+                lines.push(
+                    "  [" + (index + 1) + "] " + (item.currentFilename || item.originalFilename || ""),
+                    "      sourceUrl=" + (item.sourceUrl || ""),
+                    "      nasPath=" + (item.nasPath || "")
+                );
+            });
+
+            lines.push("", "MÊME URL SEULEMENT: " + sameSource.length);
+            sameSource.forEach((item, index) => {
+                lines.push(
+                    "  [" + (index + 1) + "] " + (item.currentFilename || item.originalFilename || ""),
+                    "      originalFilename=" + (item.originalFilename || ""),
+                    "      sourceUrl=" + (item.sourceUrl || "")
+                );
+            });
+
+            lines.push("", "MÊME NOM SEULEMENT: " + sameName.length);
+            sameName.forEach((item, index) => {
+                lines.push(
+                    "  [" + (index + 1) + "] " + (item.currentFilename || item.originalFilename || ""),
+                    "      sourceUrl=" + (item.sourceUrl || ""),
+                    "      nasPath=" + (item.nasPath || "")
+                );
+            });
+
+            if (d.error) {
+                lines.push("", "ERREUR: " + d.error);
+            }
+
+            return lines.join("\n");
+        }
+
+        video.refreshPresenceDiagnostic = function () {
+            diagnosticPanel.textContent = diagnosticText();
+        };
+        video.refreshPresenceDiagnostic();
+
+        diagnosticButton.addEventListener("click", function () {
+            video.presenceDiagnosticOpen = !video.presenceDiagnosticOpen;
+            diagnosticPanel.style.display = video.presenceDiagnosticOpen ? "block" : "none";
+            video.refreshPresenceDiagnostic();
+        });
+
         titleLine.appendChild(title);
         titleLine.appendChild(presenceLamp);
+        titleLine.appendChild(diagnosticButton);
         titleLine.appendChild(badge);
         card.appendChild(titleLine);
+        card.appendChild(diagnosticPanel);
 
         const noDownloadLabel = document.createElement("label");
         noDownloadLabel.style.display = "flex";
