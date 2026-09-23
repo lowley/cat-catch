@@ -487,40 +487,33 @@
             : baseName + ".mp4";
     }
 
-    function renderNasVideoPresenceLamp(lamp, state) {
-        if (!lamp) return;
+    function updateNasFabPresence() {
+        if (!nasFabButton) return;
 
-        if (state === "present") {
-            lamp.style.opacity = "1";
-            lamp.style.filter = "none";
-            lamp.style.textShadow = "0 0 8px rgba(255, 220, 80, .9)";
-            lamp.title = "Cette vidéo est déjà présente dans Vidaexo.";
-            return;
-        }
+        const present = Array.from(nasVideos.values()).some(function (video) {
+            return video.presenceState === "present";
+        });
 
-        lamp.style.opacity = state === "checking" ? ".45" : ".22";
-        lamp.style.filter = "grayscale(1)";
-        lamp.style.textShadow = "none";
-        lamp.title = state === "error"
-            ? "Impossible de vérifier cette vidéo dans Vidaexo."
-            : state === "checking"
-                ? "Vérification de cette vidéo dans Vidaexo…"
-                : "Cette vidéo n’est pas présente dans Vidaexo.";
+        nasFabButton.style.background = present ? "#f2c500" : "#222";
+        nasFabButton.style.color = present ? "#111" : "white";
+        nasFabButton.title = present
+            ? "Vidéo déjà présente dans Vidaexo"
+            : "Vidéos détectées";
     }
 
-    function checkNasVideoPresence(video, lamp) {
+    function checkNasVideoPresence(video) {
         const sourceUrl = getNasSourceUrl();
         const originalFilename = nasInitialFilename(video);
         const cacheKey = sourceUrl + "\n" + originalFilename;
 
         if (video.presenceCacheKey === cacheKey && video.presenceState) {
-            renderNasVideoPresenceLamp(lamp, video.presenceState);
+            updateNasFabPresence();
             return;
         }
 
         video.presenceCacheKey = cacheKey;
         video.presenceState = "checking";
-        renderNasVideoPresenceLamp(lamp, "checking");
+        updateNasFabPresence();
 
         chrome.runtime.sendMessage(
             {
@@ -536,7 +529,7 @@
                         sentSourceUrl: sourceUrl,
                         sentOriginalFilename: originalFilename
                     };
-                    renderNasVideoPresenceLamp(lamp, "error");
+                    updateNasFabPresence();
                     if (typeof video.refreshPresenceDiagnostic === "function") {
                         video.refreshPresenceDiagnostic();
                     }
@@ -551,7 +544,7 @@
                     sentOriginalFilename: originalFilename,
                     ...(response?.data || {})
                 };
-                renderNasVideoPresenceLamp(lamp, video.presenceState);
+                updateNasFabPresence();
                 if (typeof video.refreshPresenceDiagnostic === "function") {
                     video.refreshPresenceDiagnostic();
                 }
@@ -843,15 +836,6 @@
         title.style.fontWeight = "bold";
         title.style.flex = "1";
 
-        const presenceLamp = document.createElement("span");
-        presenceLamp.textContent = "💡";
-        presenceLamp.setAttribute("aria-label", "Présence de cette vidéo dans Vidaexo");
-        presenceLamp.style.fontSize = "18px";
-        presenceLamp.style.lineHeight = "1";
-        presenceLamp.style.transition = "opacity .15s ease, filter .15s ease, text-shadow .15s ease";
-        renderNasVideoPresenceLamp(presenceLamp, video.presenceState || "checking");
-        checkNasVideoPresence(video, presenceLamp);
-
         const badge = document.createElement("span");
         badge.textContent = video.type;
         badge.style.fontSize = "11px";
@@ -963,8 +947,9 @@
             video.refreshPresenceDiagnostic();
         });
 
+        checkNasVideoPresence(video);
+
         titleLine.appendChild(title);
-        titleLine.appendChild(presenceLamp);
         titleLine.appendChild(diagnosticButton);
         titleLine.appendChild(badge);
         card.appendChild(titleLine);
@@ -1256,6 +1241,11 @@
         if (nasFabBadge) {
             nasFabBadge.textContent = "0";
         }
+
+        if (nasFabButton) {
+            nasFabButton.style.background = "#222";
+            nasFabButton.style.color = "white";
+        }
     }
 
     function showNasFab(media) {
@@ -1266,6 +1256,7 @@
 
         nasFabBadge.textContent = nasMedia.size;
         nasFabHost.style.display = "block";
+        updateNasFabPresence();
     }
 
     chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
