@@ -466,6 +466,12 @@
         }
     }
 
+    function getNasSourceUrl() {
+        const canonical = document.querySelector('link[rel="canonical"]')?.href || "";
+        const ogUrl = document.querySelector('meta[property="og:url"]')?.content || "";
+        return String(canonical || ogUrl || location.href).trim();
+    }
+
     function updateNasPresenceLamp() {
         if (!nasPanel) return;
 
@@ -493,7 +499,7 @@
     function checkNasVideoPresence() {
         if (!nasIsTopFrame || nasPresenceCheckInProgress) return;
 
-        const sourceUrl = location.href;
+        const sourceUrl = getNasSourceUrl();
         if (nasPresenceCheckedUrl === sourceUrl && nasPresenceStatus !== "unknown") {
             updateNasPresenceLamp();
             return;
@@ -631,7 +637,7 @@
                                 namingRequest: {
                                     html: document.documentElement.outerHTML,
                                     initialName: initialName,
-                                    sourceUrl: location.href,
+                                    sourceUrl: getNasSourceUrl(),
                                     coverUrl: coverUrl,
                                     coverBase64: coverBase64
                                 }
