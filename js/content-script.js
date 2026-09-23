@@ -748,7 +748,7 @@
         actions.appendChild(favorite);
         actions.appendChild(send);
 
-        header.appendChild(heading);
+        header.appendChild(headingGroup);
         header.appendChild(actions);
         nasPanel.appendChild(header);
 
