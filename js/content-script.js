@@ -780,26 +780,43 @@
                             ? baseName
                             : baseName + ".mp4";
 
+                        const message = {
+                            Message: "nasSendToServer",
+                            data: {
+                                url: variant.url,
+                                referer: video.referer || "",
+                                cookie: video.cookie || "",
+                                userAgent: navigator.userAgent,
+                                title: video.title || "Vidéo",
+                                filename: initialName,
+                                duration: video.duration || null,
+                            }
+                        };
+
+                        if (video.sceneId && video.scene) {
+                            message.sceneNamingRequest = {
+                                filmTitle: nasMovieExtractionPlan?.title || document.title || "film",
+                                filmSourceUrl: getNasSourceUrl(),
+                                sceneSourceUrl: video.scene.sceneSourceUrl || "",
+                                sceneIndex: video.scene.indexInFilm || video.sceneIndex || 0,
+                                actressNames: video.scene.actressNames || [],
+                                subjectNames: video.scene.subjectNames || [],
+                                initialName: initialName,
+                                coverUrl: coverUrl,
+                                coverBase64: coverBase64
+                            };
+                        } else {
+                            message.namingRequest = {
+                                html: document.documentElement.outerHTML,
+                                initialName: initialName,
+                                sourceUrl: getNasSourceUrl(),
+                                coverUrl: coverUrl,
+                                coverBase64: coverBase64
+                            };
+                        }
+
                         chrome.runtime.sendMessage(
-                            {
-                                Message: "nasSendToServer",
-                                data: {
-                                    url: variant.url,
-                                    referer: video.referer || "",
-                                    cookie: video.cookie || "",
-                                    userAgent: navigator.userAgent,
-                                    title: video.title || "Vidéo",
-                                    filename: initialName,
-                                    duration: video.duration || null,
-                                },
-                                namingRequest: {
-                                    html: document.documentElement.outerHTML,
-                                    initialName: initialName,
-                                    sourceUrl: getNasSourceUrl(),
-                                    coverUrl: coverUrl,
-                                    coverBase64: coverBase64
-                                }
-                            },
+                            message,
                             function (response) {
                                 if (chrome.runtime.lastError || !response?.ok) {
                                     errors++;
