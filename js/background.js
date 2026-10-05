@@ -660,6 +660,17 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         return true;
     }
 
+    if (Message.Message === "vidaexoMovieExtractionPlan") {
+        vidaexoRequest("/movies/extraction-plan", {
+            method: "POST",
+            body: JSON.stringify({
+                sourceUrl: Message.sourceUrl || "",
+                html: Message.html || ""
+            })
+        }).then(sendResponse);
+        return true;
+    }
+
     if (Message.Message === "newTabGetBookmarks") {
         chrome.bookmarks.getTree().then(
             tree => sendResponse({ ok: true, tree }),
