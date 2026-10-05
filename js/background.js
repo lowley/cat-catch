@@ -588,6 +588,36 @@ function save(tabId) {
  */
 const VIDAEXO_BASE_URL = "http://127.0.0.1:8765";
 const NAS_BASE_URL = "http://10.0.0.1:9876";
+const NAS_JOB_META_KEY = "nasSceneJobMetadata";
+
+async function rememberNasSceneJobMetadata(jobId, request) {
+    if (!jobId || !request?.sceneNamingRequest) return;
+
+    const stored = await chrome.storage.local.get(NAS_JOB_META_KEY);
+    const metadata = stored[NAS_JOB_META_KEY] || {};
+
+    metadata[jobId] = {
+        jobId: jobId,
+        filmSourceUrl: request.sceneNamingRequest.filmSourceUrl || "",
+        filmTitle: request.sceneNamingRequest.filmTitle || "",
+        sceneId: request.sceneNamingRequest.sceneId || "",
+        sceneIndex: request.sceneNamingRequest.sceneIndex || null,
+        sceneCount: request.sceneNamingRequest.sceneCount || null,
+        sceneTitle: request.data?.title || "",
+        targetName: request.data?.filename || "",
+        createdAt: Date.now()
+    };
+
+    // Evite une croissance infinie tout en gardant largement assez d'historique.
+    const entries = Object.entries(metadata)
+        .sort((a, b) => Number(b[1]?.createdAt || 0) - Number(a[1]?.createdAt || 0))
+        .slice(0, 1000);
+
+    await chrome.storage.local.set({
+        [NAS_JOB_META_KEY]: Object.fromEntries(entries)
+    });
+}
+
 
 async function vidaexoRequest(path, options = {}) {
     try {
@@ -682,6 +712,14 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                 html: Message.html || ""
             })
         }).then(sendResponse);
+        return true;
+    }
+
+    if (Message.Message === "nasGetSceneJobMetadata") {
+        chrome.storage.local.get(NAS_JOB_META_KEY).then(
+            data => sendResponse({ ok: true, metadata: data[NAS_JOB_META_KEY] || {} }),
+            error => sendResponse({ ok: false, error: String(error), metadata: {} })
+        );
         return true;
     }
 
@@ -975,6 +1013,10 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                         });
                         return;
                     }
+                }
+
+                if (nasPayload?.job) {
+                    await rememberNasSceneJobMetadata(nasPayload.job, Message);
                 }
 
                 sendResponse({
