@@ -26,6 +26,14 @@
         /^\/\d+\/[^/]+\.html$/i.test(location.pathname) &&
         new URL(location.href).searchParams.get("viewpart") !== "videoplayer";
 
+    const nasOwnSceneId = nasSceneIdFromUrl(location.href);
+    if (!nasIsTopFrame && nasOwnSceneId) {
+        chrome.runtime.sendMessage(
+            { Message: "nasRegisterSceneFrame", sceneId: nasOwnSceneId },
+            function () { void chrome.runtime.lastError; }
+        );
+    }
+
     const catCatchIsLocalNewTab =
         nasIsTopFrame &&
         /(?:^|\/)newtab\.html$/i.test(location.pathname);
@@ -597,11 +605,15 @@
         );
     }
 
-    function getNasRenderableVideos() {
-        const all = Array.from(nasVideos.entries());
-        const sceneVideos = all.filter(function ([, video]) {
+    function getNasSceneVideos() {
+        return Array.from(nasVideos.entries()).filter(function ([, video]) {
             return Boolean(video.sceneId);
         });
+    }
+
+    function getNasRenderableVideos() {
+        const all = Array.from(nasVideos.entries());
+        const sceneVideos = getNasSceneVideos();
 
         // Tant qu'aucun flux de scène n'a réellement été capturé,
         // conserver l'ancien affichage des flux du film.
@@ -758,7 +770,12 @@
 
         const send = document.createElement("button");
         const renderableVideos = getNasRenderableVideos();
-        send.textContent = "SEND " + getNasSelectedCount() + "/" + renderableVideos.length;
+        const sceneStreamsReady = getNasSceneVideos().length;
+        const waitingForSceneStreams = Boolean(nasMovieExtractionPlan?.scenes?.length) && sceneStreamsReady === 0;
+        send.textContent = waitingForSceneStreams
+            ? "Flux de scènes en attente…"
+            : "SEND " + getNasSelectedCount() + "/" + renderableVideos.length;
+        send.disabled = waitingForSceneStreams;
         send.style.border = "0";
         send.style.borderRadius = "10px";
         send.style.padding = "9px 14px";
@@ -1557,7 +1574,7 @@
                 return true;
             }
 
-            const sceneId = nasSceneIdFromUrl(Message.sourceFrameUrl);
+            const sceneId = String(Message.sourceSceneId || "").trim() || nasSceneIdFromUrl(Message.sourceFrameUrl);
             const scene = nasSceneById(sceneId);
 
             // Une fois le plan connu, seuls les lecteurs de scène sont pertinents.
