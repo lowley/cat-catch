@@ -949,12 +949,25 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
             }
 
             try {
+                const nasDownloadData = {
+                    ...Message.data
+                };
+
+                if (Message.sceneNamingRequest) {
+                    nasDownloadData.filmSourceUrl = Message.sceneNamingRequest.filmSourceUrl || "";
+                    nasDownloadData.filmTitle = Message.sceneNamingRequest.filmTitle || "";
+                    nasDownloadData.sceneId = Message.sceneNamingRequest.sceneId || "";
+                    nasDownloadData.sceneIndex = Message.sceneNamingRequest.sceneIndex || null;
+                    nasDownloadData.sceneCount = Message.sceneNamingRequest.sceneCount || null;
+                    nasDownloadData.sceneTitle = Message.sceneNamingRequest.sceneTitle || Message.data?.title || "";
+                }
+
                 const response = await fetch(NAS_BASE_URL + "/download", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify(Message.data)
+                    body: JSON.stringify(nasDownloadData)
                 });
 
                 const text = await response.text();
