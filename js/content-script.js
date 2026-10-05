@@ -597,10 +597,21 @@
         );
     }
 
+    function getNasRenderableVideos() {
+        const all = Array.from(nasVideos.entries());
+        const sceneVideos = all.filter(function ([, video]) {
+            return Boolean(video.sceneId);
+        });
+
+        // Tant qu'aucun flux de scène n'a réellement été capturé,
+        // conserver l'ancien affichage des flux du film.
+        return sceneVideos.length > 0 ? sceneVideos : all;
+    }
+
     function getNasSelectedCount() {
         let count = 0;
 
-        for (const video of nasVideos.values()) {
+        for (const [, video] of getNasRenderableVideos()) {
             if (video.selected >= 0 && video.variants[video.selected]) {
                 count++;
             }
@@ -690,16 +701,19 @@
                 nasMovieExtractionLoading = false;
 
                 if (!chrome.runtime.lastError && response?.ok && response?.data?.ok) {
-                    nasMovieExtractionPlan = response.data;
+                    const candidatePlan = response.data;
+                    const candidateScenes = Array.isArray(candidatePlan?.scenes)
+                        ? candidatePlan.scenes
+                        : [];
 
-                    // Supprime d'éventuels flux du lecteur film global déjà capturés.
-                    for (const [key, video] of nasVideos) {
-                        if (!video.sceneId) {
-                            nasVideos.delete(key);
-                        }
+                    // Ne jamais basculer le panneau vers un faux mode "0 scène".
+                    // Les flux déjà détectés restent utilisables si Vidaexo ne
+                    // trouve pas encore de scènes dans le HTML courant.
+                    if (candidateScenes.length > 0) {
+                        nasMovieExtractionPlan = candidatePlan;
+                        nasCreateSceneFrames();
                     }
 
-                    nasCreateSceneFrames();
                     updateNasFabCount();
                 }
 
@@ -728,7 +742,8 @@
         header.style.alignItems = "center";
 
         const heading = document.createElement("div");
-        const sceneCount = Array.isArray(nasMovieExtractionPlan?.scenes)
+        const sceneCount = Array.isArray(nasMovieExtractionPlan?.scenes) &&
+            nasMovieExtractionPlan.scenes.length > 0
             ? nasMovieExtractionPlan.scenes.length
             : null;
         heading.textContent = sceneCount === null
@@ -742,7 +757,8 @@
         }
 
         const send = document.createElement("button");
-        send.textContent = "SEND " + getNasSelectedCount() + "/" + nasVideos.size;
+        const renderableVideos = getNasRenderableVideos();
+        send.textContent = "SEND " + getNasSelectedCount() + "/" + renderableVideos.length;
         send.style.border = "0";
         send.style.borderRadius = "10px";
         send.style.padding = "9px 14px";
@@ -766,7 +782,7 @@
             const coverBase64 = await nasDownloadCoverBase64(coverUrl);
             const promises = [];
 
-            for (const video of nasVideos.values()) {
+            for (const [, video] of getNasRenderableVideos()) {
                 const variant = video.variants[video.selected];
 
                 if (!variant) {
@@ -937,7 +953,7 @@
         header.appendChild(actions);
         nasPanel.appendChild(header);
 
-        for (const [key, video] of nasVideos) {
+        for (const [key, video] of getNasRenderableVideos()) {
             nasPanel.appendChild(createNasVideoCard(key, video));
         }
     }
@@ -1582,7 +1598,8 @@
         }
 
         function updateNasFabCount() {
-            const count = nasVideos.size || nasMedia.size;
+            const renderableCount = getNasRenderableVideos().length;
+            const count = renderableCount || nasMedia.size;
 
             if (nasFabBadge) {
                 nasFabBadge.textContent = count;
