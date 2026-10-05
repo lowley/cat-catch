@@ -196,6 +196,7 @@ async function nasParseMaster(info) {
                 Message: "nasHlsVariants",
                 sourceFrameId: info.frameId ?? 0,
                 sourceFrameUrl: sourceFrameUrl,
+                sourceSceneId: nasSceneFrameIds.get(info.tabId + ":" + (info.frameId ?? 0)) || "",
                 title: info.title,
                 masterUrl: info.url,
                 variants: variants,
@@ -712,6 +713,20 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                 html: Message.html || ""
             })
         }).then(sendResponse);
+        return true;
+    }
+
+    if (Message.Message === "nasRegisterSceneFrame") {
+        const tabId = sender?.tab?.id;
+        const frameId = sender?.frameId;
+        const sceneId = String(Message.sceneId || "").trim();
+
+        if (tabId > 0 && frameId > 0 && sceneId) {
+            nasSceneFrameIds.set(tabId + ":" + frameId, sceneId);
+            sendResponse({ ok: true, sceneId: sceneId, frameId: frameId });
+        } else {
+            sendResponse({ ok: false });
+        }
         return true;
     }
 
