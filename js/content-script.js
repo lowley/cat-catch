@@ -798,7 +798,11 @@
                                 filmTitle: nasMovieExtractionPlan?.title || document.title || "film",
                                 filmSourceUrl: getNasSourceUrl(),
                                 sceneSourceUrl: video.scene.sceneSourceUrl || "",
+                                sceneId: video.scene.sceneId || video.sceneId || "",
                                 sceneIndex: video.scene.indexInFilm || video.sceneIndex || 0,
+                                sceneCount: Array.isArray(nasMovieExtractionPlan?.scenes)
+                                    ? nasMovieExtractionPlan.scenes.length
+                                    : 0,
                                 actressNames: video.scene.actressNames || [],
                                 subjectNames: video.scene.subjectNames || [],
                                 initialName: initialName,
