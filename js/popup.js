@@ -1,3 +1,6 @@
+const catCatchManifest = chrome.runtime.getManifest();
+$(function(){ $("#catcatchBuildInfo").text(`CatCatch ${catCatchManifest.version_name || catCatchManifest.version}`); });
+
 // 解析参数
 const params = new URL(location.href).searchParams;
 const _tabId = parseInt(params.get("tabId"));
