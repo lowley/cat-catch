@@ -847,7 +847,12 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                     coverBase64: Message.sceneNamingRequest.coverBase64 || null,
                     originalFilename: Message.sceneNamingRequest.initialName || naming.data.targetName,
                     targetName: naming.data.targetName,
-                    catalogEntities: naming.data.catalogEntities || []
+                    catalogEntities: naming.data.catalogEntities || [],
+                    parentFilmSourceUrl: Message.sceneNamingRequest.filmSourceUrl || null,
+                    parentFilmTitle: Message.sceneNamingRequest.filmTitle || null,
+                    sceneId: Message.sceneNamingRequest.sceneId || null,
+                    sceneIndex: Message.sceneNamingRequest.sceneIndex || null,
+                    sceneCount: Message.sceneNamingRequest.sceneCount || null
                 };
             } else if (Message.namingRequest) {
                 const naming = await vidaexoRequest("/videos/naming", {
