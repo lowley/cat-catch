@@ -13,6 +13,7 @@
     let nasPagePresenceCacheKey = null;
     let nasMovieExtractionPlan = null;
     let nasMovieExtractionLoading = false;
+    const nasSceneFrames = new Map();
     const nasVideos = new Map();
     const nasIsTopFrame = window.top === window;
     const nasIsStatusPage =
@@ -608,6 +609,70 @@
         return count;
     }
 
+    function nasSceneIdFromUrl(value) {
+        const match = String(value || "").match(/\/adult-clips\/(\d+)(?:\/|$)/i);
+        return match ? match[1] : null;
+    }
+
+    function nasSceneById(sceneId) {
+        if (!sceneId || !Array.isArray(nasMovieExtractionPlan?.scenes)) {
+            return null;
+        }
+
+        return nasMovieExtractionPlan.scenes.find(function (scene) {
+            return String(scene.sceneId || "") === String(sceneId);
+        }) || null;
+    }
+
+    function nasCreateSceneFrames() {
+        if (!nasIsHotMoviesDescriptionPage || !Array.isArray(nasMovieExtractionPlan?.scenes)) {
+            return;
+        }
+
+        // Le lecteur film global ne sert plus une fois que nous avons les scènes.
+        const movieFrame = document.getElementById("catcatch-hotmovies-player");
+        if (movieFrame) {
+            try { movieFrame.remove(); } catch (_) {}
+        }
+
+        nasMovieExtractionPlan.scenes.forEach(function (scene) {
+            const sceneId = String(scene.sceneId || "").trim();
+            const sceneSourceUrl = String(scene.sceneSourceUrl || "").trim();
+
+            if (!sceneId || !sceneSourceUrl || nasSceneFrames.has(sceneId)) {
+                return;
+            }
+
+            let playerUrl;
+            try {
+                playerUrl = new URL(sceneSourceUrl, location.href);
+            } catch (_) {
+                return;
+            }
+
+            playerUrl.searchParams.set("viewpart", "videoplayer");
+
+            const iframe = document.createElement("iframe");
+            iframe.id = "catcatch-hotmovies-scene-" + sceneId;
+            iframe.src = playerUrl.href;
+            iframe.dataset.sceneId = sceneId;
+
+            Object.assign(iframe.style, {
+                position: "fixed",
+                width: "1px",
+                height: "1px",
+                left: "-10000px",
+                top: "-10000px",
+                opacity: "0",
+                pointerEvents: "none",
+                border: "0"
+            });
+
+            nasSceneFrames.set(sceneId, iframe);
+            document.documentElement.appendChild(iframe);
+        });
+    }
+
     function loadNasMovieExtractionPlan() {
         if (!nasIsHotMoviesDescriptionPage || nasMovieExtractionLoading || nasMovieExtractionPlan) {
             return;
@@ -626,6 +691,16 @@
 
                 if (!chrome.runtime.lastError && response?.ok && response?.data?.ok) {
                     nasMovieExtractionPlan = response.data;
+
+                    // Supprime d'éventuels flux du lecteur film global déjà capturés.
+                    for (const [key, video] of nasVideos) {
+                        if (!video.sceneId) {
+                            nasVideos.delete(key);
+                        }
+                    }
+
+                    nasCreateSceneFrames();
+                    updateNasFabCount();
                 }
 
                 if (nasPanel) {
@@ -880,22 +955,21 @@
     }
 
     function applyNasDefaultSelections() {
-        if (nasVideos.size !== 1) {
-            for (const video of nasVideos.values()) {
+        for (const video of nasVideos.values()) {
+            const index360 = video.variants.findIndex(function (variant) {
+                const resolution = String(variant.resolution || "");
+                const match = resolution.match(/x(\d+)$/);
+                return match && Number(match[1]) === 360;
+            });
+
+            // Pour les scènes identifiées, sélectionner automatiquement 360p.
+            // Pour l'ancien mode à vidéo unique, conserver le comportement existant.
+            if (video.sceneId || nasVideos.size === 1) {
+                video.selected = index360 >= 0 ? index360 : -1;
+            } else {
                 video.selected = -1;
             }
-            return;
         }
-
-        const video = nasVideos.values().next().value;
-
-        const index360 = video.variants.findIndex(function (variant) {
-            const resolution = String(variant.resolution || "");
-            const match = resolution.match(/x(\d+)$/);
-            return match && Number(match[1]) === 360;
-        });
-
-        video.selected = index360 >= 0 ? index360 : -1;
     }
 
     function createNasVideoCard(key, video) {
@@ -1321,6 +1395,12 @@
     function resetNasPage() {
         nasMedia.clear();
         nasVideos.clear();
+        for (const frame of nasSceneFrames.values()) {
+            try { frame.remove(); } catch (_) {}
+        }
+        nasSceneFrames.clear();
+        nasMovieExtractionPlan = null;
+        nasMovieExtractionLoading = false;
         nasPagePresenceState = "unknown";
         nasPagePresenceCacheKey = null;
 
@@ -1440,8 +1520,17 @@
                 return true;
             }
 
+            const sceneId = nasSceneIdFromUrl(Message.sourceFrameUrl);
+            const scene = nasSceneById(sceneId);
+
+            // Une fois le plan connu, seuls les lecteurs de scène sont pertinents.
+            if (nasIsHotMoviesDescriptionPage && nasMovieExtractionPlan && !sceneId) {
+                sendResponse("ignored");
+                return true;
+            }
+
             nasVideos.set(Message.masterUrl, {
-                title: Message.title || "Vidéo",
+                title: scene?.title || Message.title || "Vidéo",
                 type: "HLS",
                 masterUrl: Message.masterUrl,
                 variants: Message.variants || [],
@@ -1449,6 +1538,10 @@
                 selected: -1,
                 referer: Message.referer || "",
                 cookie: Message.cookie || "",
+                sourceFrameUrl: Message.sourceFrameUrl || "",
+                sceneId: sceneId,
+                sceneIndex: scene?.indexInFilm || null,
+                scene: scene || null,
             });
 
             applyNasDefaultSelections();
