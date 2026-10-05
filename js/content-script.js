@@ -11,6 +11,8 @@
     let nasPanel = null;
     let nasPagePresenceState = "unknown";
     let nasPagePresenceCacheKey = null;
+    let nasMovieExtractionPlan = null;
+    let nasMovieExtractionLoading = false;
     const nasVideos = new Map();
     const nasIsTopFrame = window.top === window;
     const nasIsStatusPage =
@@ -606,6 +608,33 @@
         return count;
     }
 
+    function loadNasMovieExtractionPlan() {
+        if (!nasIsHotMoviesDescriptionPage || nasMovieExtractionLoading || nasMovieExtractionPlan) {
+            return;
+        }
+
+        nasMovieExtractionLoading = true;
+
+        chrome.runtime.sendMessage(
+            {
+                Message: "vidaexoMovieExtractionPlan",
+                sourceUrl: getNasSourceUrl(),
+                html: document.documentElement.outerHTML
+            },
+            function (response) {
+                nasMovieExtractionLoading = false;
+
+                if (!chrome.runtime.lastError && response?.ok && response?.data?.ok) {
+                    nasMovieExtractionPlan = response.data;
+                }
+
+                if (nasPanel) {
+                    renderNasPanel();
+                }
+            }
+        );
+    }
+
     function renderNasPanel() {
         if (!nasPanel) {
             return;
@@ -624,9 +653,18 @@
         header.style.alignItems = "center";
 
         const heading = document.createElement("div");
-        heading.textContent = "Vidéos détectées";
+        const sceneCount = Array.isArray(nasMovieExtractionPlan?.scenes)
+            ? nasMovieExtractionPlan.scenes.length
+            : null;
+        heading.textContent = sceneCount === null
+            ? "Vidéos détectées"
+            : "Vidéos détectées • " + sceneCount + " scène" + (sceneCount > 1 ? "s" : "");
         heading.style.fontSize = "18px";
         heading.style.fontWeight = "bold";
+
+        if (nasIsHotMoviesDescriptionPage && !nasMovieExtractionPlan && !nasMovieExtractionLoading) {
+            loadNasMovieExtractionPlan();
+        }
 
         const send = document.createElement("button");
         send.textContent = "SEND " + getNasSelectedCount() + "/" + nasVideos.size;
