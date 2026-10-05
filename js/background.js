@@ -82,6 +82,19 @@ async function nasParseMaster(info) {
     try {
         const headers = {};
 
+        let sourceFrameUrl = "";
+        if (info.tabId > 0 && (info.frameId ?? 0) > 0) {
+            try {
+                const frame = await chrome.webNavigation.getFrame({
+                    tabId: info.tabId,
+                    frameId: info.frameId
+                });
+                sourceFrameUrl = frame?.url || "";
+            } catch (_) {
+                sourceFrameUrl = "";
+            }
+        }
+
         if (info.requestHeaders) {
             for (const [key, value] of Object.entries(info.requestHeaders)) {
                 if (value != null) {
@@ -182,6 +195,7 @@ async function nasParseMaster(info) {
             {
                 Message: "nasHlsVariants",
                 sourceFrameId: info.frameId ?? 0,
+                sourceFrameUrl: sourceFrameUrl,
                 title: info.title,
                 masterUrl: info.url,
                 variants: variants,
