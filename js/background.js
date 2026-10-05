@@ -815,7 +815,41 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
             let pendingId = null;
             let pendingVideo = Message.pendingVideo || null;
 
-            if (Message.namingRequest) {
+            if (Message.sceneNamingRequest) {
+                const naming = await vidaexoRequest("/movies/scene-naming", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        filmTitle: Message.sceneNamingRequest.filmTitle || "",
+                        sceneIndex: Message.sceneNamingRequest.sceneIndex || 0,
+                        actressNames: Message.sceneNamingRequest.actressNames || [],
+                        subjectNames: Message.sceneNamingRequest.subjectNames || []
+                    })
+                });
+
+                if (!naming.ok || !naming.data?.targetName) {
+                    sendResponse({
+                        ok: false,
+                        stage: "SCENE NAMING",
+                        status: naming.status ?? 0,
+                        error: naming.data?.error || naming.error || "SCENE_NAMING_FAILED",
+                        nasOk: false,
+                        namingOk: false,
+                        vidaexo: naming
+                    });
+                    return;
+                }
+
+                Message.data.filename = naming.data.targetName;
+
+                pendingVideo = {
+                    sourceUrl: Message.sceneNamingRequest.sceneSourceUrl || Message.sceneNamingRequest.filmSourceUrl || null,
+                    coverUrl: Message.sceneNamingRequest.coverUrl || null,
+                    coverBase64: Message.sceneNamingRequest.coverBase64 || null,
+                    originalFilename: Message.sceneNamingRequest.initialName || naming.data.targetName,
+                    targetName: naming.data.targetName,
+                    catalogEntities: naming.data.catalogEntities || []
+                };
+            } else if (Message.namingRequest) {
                 const naming = await vidaexoRequest("/videos/naming", {
                     method: "POST",
                     body: JSON.stringify({
