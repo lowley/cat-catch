@@ -13,6 +13,8 @@
     let nasPagePresenceCacheKey = null;
     let nasMovieExtractionPlan = null;
     let nasMovieExtractionLoading = false;
+    let nasMovieExtractionError = null;
+    let nasMovieExtractionAttempts = 0;
     const nasSceneFrames = new Map();
     const nasVideos = new Map();
     const nasIsTopFrame = window.top === window;
@@ -711,23 +713,40 @@
             },
             function (response) {
                 nasMovieExtractionLoading = false;
+                nasMovieExtractionAttempts++;
 
-                if (!chrome.runtime.lastError && response?.ok && response?.data?.ok) {
-                    const candidatePlan = response.data;
-                    const candidateScenes = Array.isArray(candidatePlan?.scenes)
-                        ? candidatePlan.scenes
-                        : [];
+                const runtimeError = chrome.runtime.lastError?.message || null;
+                const requestOk = !runtimeError && response?.ok && response?.data?.ok;
+                const candidatePlan = requestOk ? response.data : null;
+                const candidateScenes = Array.isArray(candidatePlan?.scenes)
+                    ? candidatePlan.scenes
+                    : [];
 
-                    // Ne jamais basculer le panneau vers un faux mode "0 scène".
-                    // Les flux déjà détectés restent utilisables si Vidaexo ne
-                    // trouve pas encore de scènes dans le HTML courant.
-                    if (candidateScenes.length > 0) {
-                        nasMovieExtractionPlan = candidatePlan;
-                        nasCreateSceneFrames();
+                if (candidateScenes.length > 0) {
+                    nasMovieExtractionPlan = candidatePlan;
+                    nasMovieExtractionError = null;
+                    nasCreateSceneFrames();
+                } else {
+                    nasMovieExtractionError = runtimeError
+                        || response?.data?.error
+                        || response?.error
+                        || (requestOk ? "Aucune scène trouvée dans la page" : "Vidaexo ne répond pas");
+
+                    // HotMovies peut finir de construire la liste des scènes après
+                    // l'ouverture du panneau. Réessayer sur le DOM courant.
+                    if (nasIsHotMoviesDescriptionPage && !nasMovieExtractionPlan && nasMovieExtractionAttempts < 6) {
+                        setTimeout(function () {
+                            if (!nasMovieExtractionLoading && !nasMovieExtractionPlan) {
+                                loadNasMovieExtractionPlan();
+                                if (nasPanel) {
+                                    renderNasPanel();
+                                }
+                            }
+                        }, 1500);
                     }
-
-                    updateNasFabCount();
                 }
+
+                updateNasFabCount();
 
                 if (nasPanel) {
                     renderNasPanel();
@@ -758,9 +777,13 @@
             nasMovieExtractionPlan.scenes.length > 0
             ? nasMovieExtractionPlan.scenes.length
             : null;
-        heading.textContent = sceneCount === null
-            ? "Vidéos détectées"
-            : "Vidéos détectées • " + sceneCount + " scène" + (sceneCount > 1 ? "s" : "");
+        heading.textContent = sceneCount !== null
+            ? "Vidéos détectées • " + sceneCount + " scène" + (sceneCount > 1 ? "s" : "")
+            : nasMovieExtractionLoading
+                ? "Vidéos détectées • recherche des scènes…"
+                : nasMovieExtractionError
+                    ? "Vidéos détectées • plan scènes indisponible"
+                    : "Vidéos détectées";
         heading.style.fontSize = "18px";
         heading.style.fontWeight = "bold";
 
@@ -771,11 +794,14 @@
         const send = document.createElement("button");
         const renderableVideos = getNasRenderableVideos();
         const sceneStreamsReady = getNasSceneVideos().length;
+        const waitingForPlan = nasIsHotMoviesDescriptionPage && !nasMovieExtractionPlan;
         const waitingForSceneStreams = Boolean(nasMovieExtractionPlan?.scenes?.length) && sceneStreamsReady === 0;
-        send.textContent = waitingForSceneStreams
-            ? "Flux de scènes en attente…"
-            : "SEND " + getNasSelectedCount() + "/" + renderableVideos.length;
-        send.disabled = waitingForSceneStreams;
+        send.textContent = waitingForPlan
+            ? (nasMovieExtractionLoading ? "Recherche des scènes…" : "Réessayer le plan scènes")
+            : waitingForSceneStreams
+                ? "Flux de scènes en attente…"
+                : "SEND " + getNasSelectedCount() + "/" + renderableVideos.length;
+        send.disabled = nasMovieExtractionLoading || waitingForSceneStreams;
         send.style.border = "0";
         send.style.borderRadius = "10px";
         send.style.padding = "9px 14px";
@@ -785,6 +811,14 @@
 
         send.addEventListener("click", async function () {
             if (send.disabled) {
+                return;
+            }
+
+            if (nasIsHotMoviesDescriptionPage && !nasMovieExtractionPlan) {
+                nasMovieExtractionAttempts = 0;
+                nasMovieExtractionError = null;
+                loadNasMovieExtractionPlan();
+                renderNasPanel();
                 return;
             }
 
@@ -969,6 +1003,17 @@
         header.appendChild(heading);
         header.appendChild(actions);
         nasPanel.appendChild(header);
+        if (nasIsHotMoviesDescriptionPage && (nasMovieExtractionLoading || nasMovieExtractionError)) {
+            const diagnostic = document.createElement("div");
+            diagnostic.className = "nas-plan-diagnostic";
+            diagnostic.style.padding = "0 12px 10px";
+            diagnostic.style.fontSize = "12px";
+            diagnostic.style.color = nasMovieExtractionError ? "#ff9b9b" : "#aaa";
+            diagnostic.textContent = nasMovieExtractionLoading
+                ? "Plan Vidaexo : chargement…"
+                : "Plan Vidaexo : " + nasMovieExtractionError;
+            nasPanel.appendChild(diagnostic);
+        }
 
         for (const [key, video] of getNasRenderableVideos()) {
             nasPanel.appendChild(createNasVideoCard(key, video));
