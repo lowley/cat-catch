@@ -17,6 +17,7 @@
     let nasMovieExtractionAttempts = 0;
     const nasSceneFrames = new Map();
     const nasVideos = new Map();
+    const nasTrace = [];
     const nasIsTopFrame = window.top === window;
     const nasIsStatusPage =
         location.hostname === "10.0.0.1" &&
@@ -280,6 +281,27 @@
             section.appendChild(grid);
             container.appendChild(section);
         });
+    }
+
+    function nasAddTrace(stage, details = {}) {
+        const text = Object.entries(details)
+            .filter(([, value]) => value !== undefined && value !== null && value !== "")
+            .map(([key, value]) => key + "=" + String(value))
+            .join(" · ");
+
+        nasTrace.push({
+            time: new Date().toLocaleTimeString(),
+            stage: stage,
+            details: text
+        });
+
+        if (nasTrace.length > 80) {
+            nasTrace.shift();
+        }
+
+        if (nasPanel) {
+            renderNasPanel();
+        }
     }
 
     function nasLoadHotMoviesPlayerInBackground() {
@@ -695,6 +717,10 @@
 
             nasSceneFrames.set(sceneId, iframe);
             document.documentElement.appendChild(iframe);
+            nasAddTrace("Lecteur de scène créé", {
+                scène: sceneId,
+                url: playerUrl.href
+            });
         });
     }
 
@@ -704,6 +730,9 @@
         }
 
         nasMovieExtractionLoading = true;
+        nasAddTrace("Plan de scènes demandé", {
+            url: getNasSourceUrl()
+        });
 
         chrome.runtime.sendMessage(
             {
@@ -725,12 +754,19 @@
                 if (candidateScenes.length > 0) {
                     nasMovieExtractionPlan = candidatePlan;
                     nasMovieExtractionError = null;
+                    nasAddTrace("Plan de scènes reçu", {
+                        scènes: candidateScenes.length
+                    });
                     nasCreateSceneFrames();
                 } else {
                     nasMovieExtractionError = runtimeError
                         || response?.data?.error
                         || response?.error
                         || (requestOk ? "Aucune scène trouvée dans la page" : "Vidaexo ne répond pas");
+                    nasAddTrace("Plan de scènes absent", {
+                        erreur: nasMovieExtractionError,
+                        tentative: nasMovieExtractionAttempts
+                    });
 
                     // HotMovies peut finir de construire la liste des scènes après
                     // l'ouverture du panneau. Réessayer sur le DOM courant.
@@ -1003,6 +1039,37 @@
         header.appendChild(heading);
         header.appendChild(actions);
         nasPanel.appendChild(header);
+
+        const trace = document.createElement("details");
+        trace.style.margin = "0 12px 12px";
+        trace.style.padding = "9px";
+        trace.style.background = "#171717";
+        trace.style.border = "1px solid #444";
+        trace.style.borderRadius = "8px";
+
+        const traceSummary = document.createElement("summary");
+        traceSummary.textContent = "TRACE SCÈNES (" + nasTrace.length + ")";
+        traceSummary.style.color = "#d7f7ff";
+        traceSummary.style.fontSize = "12px";
+        traceSummary.style.cursor = "pointer";
+        trace.appendChild(traceSummary);
+
+        const traceText = document.createElement("pre");
+        traceText.textContent = nasTrace.length
+            ? nasTrace.map(function (entry) {
+                return entry.time + "  " + entry.stage +
+                    (entry.details ? " — " + entry.details : "");
+            }).join("\n")
+            : "Aucune trace.";
+        traceText.style.margin = "9px 0 0";
+        traceText.style.whiteSpace = "pre-wrap";
+        traceText.style.wordBreak = "break-word";
+        traceText.style.color = "#d7f7ff";
+        traceText.style.fontSize = "11px";
+        traceText.style.lineHeight = "1.35";
+        trace.appendChild(traceText);
+        nasPanel.appendChild(trace);
+
         if (nasIsHotMoviesDescriptionPage && (nasMovieExtractionLoading || nasMovieExtractionError)) {
             const diagnostic = document.createElement("div");
             diagnostic.className = "nas-plan-diagnostic";
@@ -1538,15 +1605,28 @@
         if (chrome.runtime.lastError) { return; }
 
         if (Message.Message === "nasVideoDetected") {
+            nasAddTrace("Média reçu", {
+                frame: Message.sourceFrameId,
+                type: Message.media?.type,
+                url: Message.media?.url
+            });
+
             if (nasIsTopFrame) {
 
                 // Sur la page descriptive HotMovies,
                 // ignorer les médias provenant directement de la page principale.
                 if (nasIsHotMoviesDescriptionPage && Message.sourceFrameId === 0) {
+                    nasAddTrace("Média ignoré", {
+                        raison: "page descriptive / frame 0",
+                        url: Message.media?.url
+                    });
                     sendResponse("ignored");
                     return true;
                 }
 
+                nasAddTrace("Média conservé", {
+                    url: Message.media?.url
+                });
                 showNasFab(Message.media);
             }
 
@@ -1614,7 +1694,18 @@
         }
 
         if (Message.Message === "nasHlsVariants") {
+            nasAddTrace("Playlist HLS reçue", {
+                frame: Message.sourceFrameId,
+                scène: Message.sourceSceneId || nasSceneIdFromUrl(Message.sourceFrameUrl),
+                variantes: Array.isArray(Message.variants) ? Message.variants.length : 0,
+                url: Message.masterUrl
+            });
+
             if (nasIsHotMoviesDescriptionPage && Message.sourceFrameId === 0) {
+                nasAddTrace("Playlist HLS ignorée", {
+                    raison: "page descriptive / frame 0",
+                    url: Message.masterUrl
+                });
                 sendResponse("ignored");
                 return true;
             }
@@ -1624,10 +1715,18 @@
 
             // Une fois le plan connu, seuls les lecteurs de scène sont pertinents.
             if (nasIsHotMoviesDescriptionPage && nasMovieExtractionPlan && !sceneId) {
+                nasAddTrace("Playlist HLS ignorée", {
+                    raison: "aucune scène associée",
+                    url: Message.masterUrl
+                });
                 sendResponse("ignored");
                 return true;
             }
 
+            nasAddTrace("Playlist HLS ajoutée", {
+                scène: sceneId || "film",
+                url: Message.masterUrl
+            });
             nasVideos.set(Message.masterUrl, {
                 title: scene?.title || Message.title || "Vidéo",
                 type: "HLS",
