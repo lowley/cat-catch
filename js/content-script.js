@@ -12,6 +12,7 @@
     let nasPagePresenceState = "unknown";
     let nasPagePresenceCacheKey = null;
     const nasVideos = new Map();
+    const nasTrace = [];
     const nasIsTopFrame = window.top === window;
     const nasIsStatusPage =
         location.hostname === "10.0.0.1" &&
@@ -269,6 +270,23 @@
         });
     }
 
+    function nasAddTrace(stage, details = {}) {
+        const safeDetails = Object.entries(details)
+            .filter(([, value]) => value !== undefined && value !== null && value !== "")
+            .map(([key, value]) => key + "=" + String(value))
+            .join(" · ");
+
+        nasTrace.push({
+            time: new Date().toLocaleTimeString(),
+            stage: stage,
+            details: safeDetails
+        });
+
+        if (nasTrace.length > 60) {
+            nasTrace.shift();
+        }
+    }
+
     function nasLoadHotMoviesPlayerInBackground() {
         if (!nasIsTopFrame) {
             return;
@@ -312,6 +330,9 @@
         iframe.style.border = "0";
 
         document.documentElement.appendChild(iframe);
+        nasAddTrace("Lecteur caché créé", {
+            url: playerUrl.href
+        });
     }
 
     function createNasStatusBackButton() {
@@ -802,6 +823,36 @@
         header.appendChild(heading);
         header.appendChild(actions);
         nasPanel.appendChild(header);
+
+        const trace = document.createElement("details");
+        trace.style.margin = "0 12px 12px";
+        trace.style.padding = "9px";
+        trace.style.background = "#171717";
+        trace.style.border = "1px solid #444";
+        trace.style.borderRadius = "8px";
+
+        const traceSummary = document.createElement("summary");
+        traceSummary.textContent = "TRACE HOTMOVIES (" + nasTrace.length + ")";
+        traceSummary.style.color = "#d7f7ff";
+        traceSummary.style.fontSize = "12px";
+        traceSummary.style.cursor = "pointer";
+        trace.appendChild(traceSummary);
+
+        const traceText = document.createElement("pre");
+        traceText.textContent = nasTrace.length
+            ? nasTrace.map(function (entry) {
+                return entry.time + "  " + entry.stage +
+                    (entry.details ? " — " + entry.details : "");
+            }).join("\n")
+            : "Aucune trace reçue.";
+        traceText.style.margin = "9px 0 0";
+        traceText.style.whiteSpace = "pre-wrap";
+        traceText.style.wordBreak = "break-word";
+        traceText.style.color = "#d7f7ff";
+        traceText.style.fontSize = "11px";
+        traceText.style.lineHeight = "1.35";
+        trace.appendChild(traceText);
+        nasPanel.appendChild(trace);
 
         for (const [key, video] of nasVideos) {
             nasPanel.appendChild(createNasVideoCard(key, video));
@@ -1321,15 +1372,29 @@
         if (chrome.runtime.lastError) { return; }
 
         if (Message.Message === "nasVideoDetected") {
+            nasAddTrace("Média reçu", {
+                frame: Message.sourceFrameId,
+                ext: Message.media?.ext,
+                type: Message.media?.type,
+                url: Message.media?.url
+            });
+
             if (nasIsTopFrame) {
 
                 // Sur la page descriptive HotMovies,
                 // ignorer les médias provenant directement de la page principale.
                 if (nasIsHotMoviesDescriptionPage && Message.sourceFrameId === 0) {
+                    nasAddTrace("Média ignoré", {
+                        raison: "page descriptive / frame 0",
+                        url: Message.media?.url
+                    });
                     sendResponse("ignored");
                     return true;
                 }
 
+                nasAddTrace("Média conservé", {
+                    url: Message.media?.url
+                });
                 showNasFab(Message.media);
             }
 
@@ -1397,11 +1462,24 @@
         }
 
         if (Message.Message === "nasHlsVariants") {
+            nasAddTrace("Playlist HLS reçue", {
+                frame: Message.sourceFrameId,
+                variantes: Array.isArray(Message.variants) ? Message.variants.length : 0,
+                url: Message.masterUrl
+            });
+
             if (nasIsHotMoviesDescriptionPage && Message.sourceFrameId === 0) {
+                nasAddTrace("Playlist HLS ignorée", {
+                    raison: "page descriptive / frame 0",
+                    url: Message.masterUrl
+                });
                 sendResponse("ignored");
                 return true;
             }
 
+            nasAddTrace("Playlist HLS ajoutée", {
+                url: Message.masterUrl
+            });
             nasVideos.set(Message.masterUrl, {
                 title: Message.title || "Vidéo",
                 type: "HLS",
