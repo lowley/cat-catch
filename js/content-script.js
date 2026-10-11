@@ -924,7 +924,7 @@
 
             const coverUrl = nasExtractHotMoviesCoverUrl();
             const coverBase64 = await nasDownloadCoverBase64(coverUrl);
-            const promises = [];
+            const sendTasks = [];
 
             for (const [, video] of getNasRenderableVideos()) {
                 if (video.includeSelected === false) continue;
@@ -934,8 +934,8 @@
                     continue;
                 }
 
-                promises.push(
-                    new Promise(function (resolve) {
+                sendTasks.push(function () {
+                    return new Promise(function (resolve) {
                         const baseName = String(video.title || document.title || "video").trim() || "video";
                         const initialName = /\.[A-Za-z0-9]{2,5}$/.test(baseName)
                             ? baseName
@@ -1008,11 +1008,27 @@
                                 resolve();
                             }
                         );
-                    })
-                );
+                    });
+                });
             }
 
-            await Promise.all(promises);
+            if (sendTasks.length === 0) {
+                send.textContent = "Aucune vidéo sélectionnée";
+                send.disabled = false;
+                return;
+            }
+
+            let completedTasks = 0;
+            send.textContent = "ENVOI 0/" + sendTasks.length;
+            let nextTask = 0;
+            await Promise.all(Array.from({ length: Math.min(3, sendTasks.length) }, async function () {
+                while (nextTask < sendTasks.length) {
+                    const task = sendTasks[nextTask++];
+                    await task();
+                    completedTasks++;
+                    send.textContent = "ENVOI " + completedTasks + "/" + sendTasks.length;
+                }
+            }));
 
             if (errors === 0 && success > 0) {
                 send.textContent = "✓ ENVOYÉ " + success;
@@ -1270,7 +1286,7 @@
             // Pour les scènes identifiées, sélectionner automatiquement 360p.
             // Pour l'ancien mode à vidéo unique, conserver le comportement existant.
             if (video.sceneId || nasVideos.size === 1) {
-                video.selected = index360 >= 0 ? index360 : -1;
+                video.selected = index360 >= 0 ? index360 : (video.variants.length > 0 ? 0 : -1);
             } else {
                 video.selected = -1;
             }
