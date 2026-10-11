@@ -733,7 +733,8 @@
                 createdAt: Date.now(),
                 loadSeen: false,
                 extensionReady: false,
-                mediaSeen: false
+                mediaSeen: false,
+                sceneStreamReady: false
             };
             nasSceneFrameStatus.set(sceneId, frameState);
             iframe.addEventListener("load", function () {
@@ -753,12 +754,13 @@
                 });
             });
             setTimeout(function () {
-                if (!frameState.mediaSeen) {
-                    nasAddTrace("Aucun média après 15 s", {
+                if (!frameState.sceneStreamReady) {
+                    nasAddTrace("Aucun flux exploitable après 15 s", {
                         scène: sceneId,
                         index: scene.indexInFilm,
                         iframeLoad: frameState.loadSeen ? "oui" : "non",
                         scriptCatCatch: frameState.extensionReady ? "oui" : "non",
+                        médiaReçu: frameState.mediaSeen ? "oui" : "non",
                         url: playerUrl.href
                     });
                 }
@@ -1691,6 +1693,14 @@
                 type: Message.media?.type,
                 url: Message.media?.url
             });
+            if (frameState && !String(Message.media?.url || "").toLowerCase().includes("master.m3u8")) {
+                nasAddTrace("Média détecté sans playlist maître", {
+                    scène: sceneId,
+                    type: Message.media?.type,
+                    extension: Message.media?.ext,
+                    url: Message.media?.url
+                });
+            }
 
             if (nasIsTopFrame) {
 
@@ -1793,7 +1803,10 @@
 
             const sceneId = String(Message.sourceSceneId || "").trim() || nasSceneIdFromUrl(Message.sourceFrameUrl);
             const frameState = nasSceneFrameStatus.get(String(sceneId || ""));
-            if (frameState) frameState.mediaSeen = true;
+            if (frameState) {
+                frameState.mediaSeen = true;
+                frameState.sceneStreamReady = true;
+            }
             const scene = nasSceneById(sceneId);
 
             // Une fois le plan connu, seuls les lecteurs de scène sont pertinents.
