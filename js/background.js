@@ -1547,6 +1547,32 @@ chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
  * 检查 注入脚本
  */
 chrome.webNavigation.onCommitted.addListener(function (details) {
+    if (details.tabId > 0) {
+        const tabPrefix = details.tabId + ":";
+        const frameKey = tabPrefix + details.frameId;
+
+        if (details.frameId === 0) {
+            for (const key of nasSceneFrameIds.keys()) {
+                if (key.startsWith(tabPrefix)) {
+                    nasSceneFrameIds.delete(key);
+                }
+            }
+        } else {
+            nasSceneFrameIds.delete(frameKey);
+            const parentSceneId = nasSceneFrameIds.get(tabPrefix + details.parentFrameId);
+            if (parentSceneId) {
+                nasSceneFrameIds.set(frameKey, parentSceneId);
+                nasTraceSceneEvent(details.tabId, {
+                    stage: "Association de scène héritée",
+                    frameId: details.frameId,
+                    parentFrameId: details.parentFrameId,
+                    sceneId: parentSceneId,
+                    url: details.url
+                });
+            }
+        }
+    }
+
     if (isSpecialPage(details.url) || details.tabId <= 0 || !G.initSyncComplete) {
         return;
     }
@@ -1617,6 +1643,12 @@ chrome.webNavigation.onCommitted.addListener(function (details) {
  * 监听 标签关闭 清理数据
  */
 chrome.tabs.onRemoved.addListener(function (tabId) {
+    const tabPrefix = tabId + ":";
+    for (const key of nasSceneFrameIds.keys()) {
+        if (key.startsWith(tabPrefix)) {
+            nasSceneFrameIds.delete(key);
+        }
+    }
     // 清理缓存数据
     chrome.alarms.get("nowClear", function (alarm) {
         !alarm && chrome.alarms.create("nowClear", {when: Date.now() + 1000});
