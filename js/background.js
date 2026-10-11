@@ -899,8 +899,10 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         (async () => {
             let pendingId = null;
             let pendingVideo = Message.pendingVideo || null;
+            nasTraceSceneEvent(Message.tabId, { stage: "Envoi démarré" });
 
             if (Message.sceneNamingRequest) {
+                nasTraceSceneEvent(Message.tabId, { stage: "Appel Vidaexo : nommage scène" });
                 const naming = await vidaexoRequest("/movies/scene-naming", {
                     method: "POST",
                     body: JSON.stringify({
@@ -940,6 +942,7 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                     sceneCount: Message.sceneNamingRequest.sceneCount || null
                 };
             } else if (Message.namingRequest) {
+                nasTraceSceneEvent(Message.tabId, { stage: "Appel Vidaexo : nommage vidéo" });
                 const naming = await vidaexoRequest("/videos/naming", {
                     method: "POST",
                     body: JSON.stringify({
@@ -974,6 +977,7 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
             }
 
             if (pendingVideo) {
+                nasTraceSceneEvent(Message.tabId, { stage: "Appel Vidaexo : enregistrement en attente" });
                 const pending = await vidaexoRequest("/videos/pending", {
                     method: "POST",
                     body: JSON.stringify(pendingVideo)
@@ -1009,6 +1013,7 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                     nasDownloadData.sceneTitle = Message.sceneNamingRequest.sceneTitle || Message.data?.title || "";
                 }
 
+                nasTraceSceneEvent(Message.tabId, { stage: "Appel NAS : HTTP 10.0.0.1:9876/download" });
                 const response = await fetch(NAS_BASE_URL + "/download", {
                     method: "POST",
                     headers: {
@@ -1047,6 +1052,7 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
                 }
 
                 if (pendingId && nasPayload?.job) {
+                    nasTraceSceneEvent(Message.tabId, { stage: "Appel Vidaexo : association de la tâche NAS" });
                     const attached = await vidaexoRequest("/videos/pending/job", {
                         method: "POST",
                         body: JSON.stringify({
