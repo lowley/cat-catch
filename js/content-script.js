@@ -1093,39 +1093,7 @@
         header.appendChild(actions);
         nasPanel.appendChild(header);
 
-        const trace = document.createElement("details");
-        trace.style.margin = "0 12px 12px";
-        trace.style.padding = "9px";
-        trace.style.setProperty("background-color", "#171717", "important");
-        trace.style.setProperty("color", "#d7f7ff", "important");
-        trace.open = true;
-        trace.style.border = "1px solid #444";
-        trace.style.borderRadius = "8px";
 
-        const traceSummary = document.createElement("summary");
-        traceSummary.textContent = "TRACE SCÈNES (" + nasTrace.length + ")";
-        traceSummary.style.color = "#d7f7ff";
-        traceSummary.style.fontSize = "12px";
-        traceSummary.style.cursor = "pointer";
-        trace.appendChild(traceSummary);
-
-        const traceText = document.createElement("pre");
-        traceText.textContent = nasTrace.length
-            ? nasTrace.map(function (entry) {
-                return entry.time + "  " + entry.stage +
-                    (entry.details ? " — " + entry.details : "");
-            }).join("\n")
-            : "Aucune trace.";
-        traceText.style.margin = "9px 0 0";
-        traceText.style.whiteSpace = "pre-wrap";
-        traceText.style.wordBreak = "break-word";
-        traceText.style.setProperty("color", "#d7f7ff", "important");
-        traceText.style.setProperty("background-color", "transparent", "important");
-        traceText.style.setProperty("display", "block", "important");
-        traceText.style.fontSize = "11px";
-        traceText.style.lineHeight = "1.35";
-        trace.appendChild(traceText);
-        nasPanel.appendChild(trace);
 
         if (nasIsHotMoviesDescriptionPage && (nasMovieExtractionLoading || nasMovieExtractionError)) {
             const diagnostic = document.createElement("div");
