@@ -56,6 +56,17 @@ let debounce = undefined;
 let debounceCount = 0;
 let debounceTime = 0;
 const reFilename = /filename="?([^"]+)"?/;
+const nasSceneFrameIds = new Map();
+
+function nasTraceSceneEvent(tabId, details) {
+    if (!Number.isInteger(tabId) || tabId <= 0) return;
+    chrome.tabs.sendMessage(
+        tabId,
+        { Message: "nasSceneDiagnostic", ...details },
+        { frameId: 0 },
+        () => { void chrome.runtime.lastError; }
+    );
+}
 
 G.deepSearchTemporarilyClose = null; // 深度搜索临时变量
 G.urlMap = new Map();   // url查重map
@@ -80,6 +91,14 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
 
 async function nasParseMaster(info) {
     try {
+        const frameId = info.frameId ?? 0;
+        const frameKey = info.tabId + ":" + frameId;
+        nasTraceSceneEvent(info.tabId, {
+            stage: "Playlist maître interceptée",
+            frameId,
+            sceneId: nasSceneFrameIds.get(frameKey) || "",
+            url: info.url
+        });
         const headers = {};
 
         let sourceFrameUrl = "";
@@ -211,6 +230,12 @@ async function nasParseMaster(info) {
         );
 
     } catch (e) {
+        nasTraceSceneEvent(info.tabId, {
+            stage: "Échec analyse playlist maître",
+            frameId: info.frameId ?? 0,
+            url: info.url,
+            error: String(e)
+        });
         console.log("NAS master parse error", e);
     }
 }
@@ -489,6 +514,7 @@ function findMedia(data, isRegex = false, filter = false, timer = false) {
                 {
                     Message: "nasVideoDetected",
                     sourceFrameId: info.frameId,
+                    sourceSceneId: nasSceneFrameIds.get(info.tabId + ":" + (info.frameId ?? 0)) || "",
                     media: {
                         requestId: info.requestId,
                         url: info.url,
@@ -723,6 +749,12 @@ chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
 
         if (tabId > 0 && frameId > 0 && sceneId) {
             nasSceneFrameIds.set(tabId + ":" + frameId, sceneId);
+            chrome.tabs.sendMessage(
+                tabId,
+                { Message: "nasSceneFrameRegistered", sceneId, frameId },
+                { frameId: 0 },
+                () => { void chrome.runtime.lastError; }
+            );
             sendResponse({ ok: true, sceneId: sceneId, frameId: frameId });
         } else {
             sendResponse({ ok: false });
