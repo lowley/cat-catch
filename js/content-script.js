@@ -16,6 +16,7 @@
     let nasMovieExtractionError = null;
     let nasMovieExtractionAttempts = 0;
     const nasSceneFrames = new Map();
+    const nasSceneFrameStatus = new Map();
     const nasVideos = new Map();
     const nasTrace = [];
     const nasIsTopFrame = window.top === window;
@@ -686,14 +687,24 @@
             const sceneId = String(scene.sceneId || "").trim();
             const sceneSourceUrl = String(scene.sceneSourceUrl || "").trim();
 
-            if (!sceneId || !sceneSourceUrl || nasSceneFrames.has(sceneId)) {
+            if (!sceneId) {
+                nasAddTrace("Scène ignorée", { index: scene.indexInFilm, raison: "identifiant absent", url: sceneSourceUrl });
+                return;
+            }
+            if (!sceneSourceUrl) {
+                nasAddTrace("Scène ignorée", { index: scene.indexInFilm, scène: sceneId, raison: "URL absente" });
+                return;
+            }
+            if (nasSceneFrames.has(sceneId)) {
+                nasAddTrace("Scène ignorée", { index: scene.indexInFilm, scène: sceneId, raison: "doublon" });
                 return;
             }
 
             let playerUrl;
             try {
                 playerUrl = new URL(sceneSourceUrl, location.href);
-            } catch (_) {
+            } catch (error) {
+                nasAddTrace("URL de scène invalide", { index: scene.indexInFilm, scène: sceneId, url: sceneSourceUrl, error: String(error) });
                 return;
             }
 
@@ -715,10 +726,49 @@
                 border: "0"
             });
 
+            const frameState = {
+                sceneId: sceneId,
+                index: scene.indexInFilm,
+                url: playerUrl.href,
+                createdAt: Date.now(),
+                loadSeen: false,
+                extensionReady: false,
+                mediaSeen: false
+            };
+            nasSceneFrameStatus.set(sceneId, frameState);
+            iframe.addEventListener("load", function () {
+                frameState.loadSeen = true;
+                nasAddTrace("Événement load de l’iframe", {
+                    scène: sceneId,
+                    index: scene.indexInFilm,
+                    duréeMs: Date.now() - frameState.createdAt,
+                    url: playerUrl.href
+                });
+            });
+            iframe.addEventListener("error", function () {
+                nasAddTrace("Erreur de chargement iframe", {
+                    scène: sceneId,
+                    index: scene.indexInFilm,
+                    url: playerUrl.href
+                });
+            });
+            setTimeout(function () {
+                if (!frameState.mediaSeen) {
+                    nasAddTrace("Aucun média après 15 s", {
+                        scène: sceneId,
+                        index: scene.indexInFilm,
+                        iframeLoad: frameState.loadSeen ? "oui" : "non",
+                        scriptCatCatch: frameState.extensionReady ? "oui" : "non",
+                        url: playerUrl.href
+                    });
+                }
+            }, 15000);
+
             nasSceneFrames.set(sceneId, iframe);
             document.documentElement.appendChild(iframe);
             nasAddTrace("Lecteur de scène créé", {
                 scène: sceneId,
+                index: scene.indexInFilm,
                 url: playerUrl.href
             });
         });
@@ -755,7 +805,10 @@
                     nasMovieExtractionPlan = candidatePlan;
                     nasMovieExtractionError = null;
                     nasAddTrace("Plan de scènes reçu", {
-                        scènes: candidateScenes.length
+                        scènes: candidateScenes.length,
+                        détails: candidateScenes.map(function (scene) {
+                            return (scene.indexInFilm ?? "?") + ":" + (scene.sceneId || "sans-id") + ":" + (scene.sceneSourceUrl || "sans-url");
+                        }).join(" | ")
                     });
                     nasCreateSceneFrames();
                 } else {
@@ -1604,9 +1657,37 @@
     chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
         if (chrome.runtime.lastError) { return; }
 
+        if (Message.Message === "nasSceneFrameRegistered") {
+            const sceneId = String(Message.sceneId || "");
+            const frameState = nasSceneFrameStatus.get(sceneId);
+            if (frameState) frameState.extensionReady = true;
+            nasAddTrace("Script CatCatch présent dans l’iframe", {
+                scène: sceneId,
+                frame: Message.frameId,
+                connueDansPlan: frameState ? "oui" : "non"
+            });
+            sendResponse({ ok: true });
+            return true;
+        }
+
+        if (Message.Message === "nasSceneDiagnostic") {
+            const stage = String(Message.stage || "Diagnostic réseau");
+            nasAddTrace(stage, {
+                frame: Message.frameId,
+                scène: Message.sceneId,
+                url: Message.url,
+                erreur: Message.error
+            });
+            return true;
+        }
+
         if (Message.Message === "nasVideoDetected") {
+            const sceneId = String(Message.sourceSceneId || "").trim();
+            const frameState = nasSceneFrameStatus.get(sceneId);
+            if (frameState) frameState.mediaSeen = true;
             nasAddTrace("Média reçu", {
                 frame: Message.sourceFrameId,
+                scène: sceneId || "sans association",
                 type: Message.media?.type,
                 url: Message.media?.url
             });
@@ -1711,6 +1792,8 @@
             }
 
             const sceneId = String(Message.sourceSceneId || "").trim() || nasSceneIdFromUrl(Message.sourceFrameUrl);
+            const frameState = nasSceneFrameStatus.get(String(sceneId || ""));
+            if (frameState) frameState.mediaSeen = true;
             const scene = nasSceneById(sceneId);
 
             // Une fois le plan connu, seuls les lecteurs de scène sont pertinents.
