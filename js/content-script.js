@@ -300,9 +300,7 @@
             nasTrace.shift();
         }
 
-        if (nasPanel) {
-            renderNasPanel();
-        }
+
     }
 
     function nasLoadHotMoviesPlayerInBackground() {
@@ -631,9 +629,15 @@
     }
 
     function getNasSceneVideos() {
-        return Array.from(nasVideos.entries()).filter(function ([, video]) {
-            return Boolean(video.sceneId);
-        });
+        return Array.from(nasVideos.entries())
+            .filter(function ([, video]) { return Boolean(video.sceneId); })
+            .sort(function (a, b) {
+                const aIndex = Number(a[1].sceneIndex ?? nasSceneById(a[1].sceneId)?.indexInFilm);
+                const bIndex = Number(b[1].sceneIndex ?? nasSceneById(b[1].sceneId)?.indexInFilm);
+                const safeA = Number.isFinite(aIndex) ? aIndex : Number.MAX_SAFE_INTEGER;
+                const safeB = Number.isFinite(bIndex) ? bIndex : Number.MAX_SAFE_INTEGER;
+                return safeA - safeB || String(a[1].sceneId).localeCompare(String(b[1].sceneId), undefined, { numeric: true });
+            });
     }
 
     function getNasRenderableVideos() {
@@ -649,7 +653,7 @@
         let count = 0;
 
         for (const [, video] of getNasRenderableVideos()) {
-            if (video.selected >= 0 && video.variants[video.selected]) {
+            if (video.includeSelected !== false && video.selected >= 0 && video.variants[video.selected]) {
                 count++;
             }
         }
@@ -923,6 +927,7 @@
             const promises = [];
 
             for (const [, video] of getNasRenderableVideos()) {
+                if (video.includeSelected === false) continue;
                 const variant = video.variants[video.selected];
 
                 if (!variant) {
@@ -1107,9 +1112,117 @@
             nasPanel.appendChild(diagnostic);
         }
 
-        for (const [key, video] of getNasRenderableVideos()) {
-            nasPanel.appendChild(createNasVideoCard(key, video));
+        const sceneVideos = getNasSceneVideos();
+        if (sceneVideos.length > 0) {
+            nasPanel.appendChild(createNasSceneSelector(sceneVideos));
+        } else {
+            for (const [key, video] of getNasRenderableVideos()) {
+                nasPanel.appendChild(createNasVideoCard(key, video));
+            }
         }
+    }
+
+    function createNasSceneSelector(sceneVideos) {
+        const section = document.createElement("div");
+        section.style.margin = "0 12px 12px";
+        section.style.padding = "10px";
+        section.style.background = "#222";
+        section.style.borderRadius = "10px";
+
+        const toolbar = document.createElement("label");
+        toolbar.style.display = "flex";
+        toolbar.style.alignItems = "center";
+        toolbar.style.gap = "8px";
+        toolbar.style.padding = "2px 2px 9px";
+        toolbar.style.fontWeight = "bold";
+        toolbar.style.color = "white";
+
+        const selectAll = document.createElement("input");
+        selectAll.type = "checkbox";
+        selectAll.checked = sceneVideos.every(([, video]) => video.includeSelected !== false);
+        selectAll.addEventListener("change", function () {
+            sceneVideos.forEach(([, video]) => { video.includeSelected = selectAll.checked; });
+            renderNasPanel();
+        });
+
+        const selectAllText = document.createElement("span");
+        selectAllText.textContent = "Tout sélectionner (" + sceneVideos.length + " scènes)";
+        toolbar.appendChild(selectAll);
+        toolbar.appendChild(selectAllText);
+        section.appendChild(toolbar);
+
+        const grid = document.createElement("div");
+        grid.style.display = "grid";
+        grid.style.gridTemplateColumns = "repeat(auto-fit, minmax(220px, 1fr))";
+        grid.style.gap = "2px 12px";
+        grid.style.maxHeight = "45vh";
+        grid.style.overflowY = "auto";
+
+        sceneVideos.forEach(function ([, video], ordinal) {
+            const row = document.createElement("div");
+            row.style.display = "grid";
+            row.style.gridTemplateColumns = "minmax(0, 1fr) auto";
+            row.style.alignItems = "center";
+            row.style.gap = "6px";
+            row.style.minWidth = "0";
+            row.style.padding = "3px 2px";
+            row.style.borderBottom = "1px solid #393939";
+
+            const label = document.createElement("label");
+            label.style.display = "flex";
+            label.style.alignItems = "center";
+            label.style.gap = "6px";
+            label.style.minWidth = "0";
+            label.style.color = "white";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = video.includeSelected !== false;
+            checkbox.addEventListener("change", function () {
+                video.includeSelected = checkbox.checked;
+                renderNasPanel();
+            });
+
+            const sceneNumber = Number(video.sceneIndex ?? video.scene?.indexInFilm) || ordinal + 1;
+            const title = document.createElement("span");
+            title.textContent = sceneNumber + ". " + (video.title || "Scène");
+            title.title = title.textContent;
+            title.style.whiteSpace = "nowrap";
+            title.style.overflow = "hidden";
+            title.style.textOverflow = "ellipsis";
+            title.style.fontSize = "12px";
+
+            label.appendChild(checkbox);
+            label.appendChild(title);
+            row.appendChild(label);
+
+            const quality = document.createElement("select");
+            quality.style.maxWidth = "86px";
+            quality.style.fontSize = "11px";
+            quality.style.background = "#111";
+            quality.style.color = "white";
+            quality.style.border = "1px solid #555";
+            quality.style.borderRadius = "5px";
+            video.variants.forEach(function (variant, index) {
+                const option = document.createElement("option");
+                const resolution = String(variant.resolution || "?");
+                const height = resolution.includes("x") ? resolution.split("x")[1] + "p" : resolution;
+                option.value = String(index);
+                option.textContent = height;
+                option.selected = video.selected === index;
+                quality.appendChild(option);
+            });
+            quality.disabled = video.variants.length === 0;
+            quality.addEventListener("change", function () {
+                video.selected = Number(quality.value);
+                renderNasPanel();
+            });
+            row.appendChild(quality);
+            grid.appendChild(row);
+        });
+
+        section.appendChild(grid);
+        return section;
     }
 
     function nasFormatDuration(seconds) {
@@ -1147,6 +1260,7 @@
 
     function applyNasDefaultSelections() {
         for (const video of nasVideos.values()) {
+            video.includeSelected ??= true;
             const index360 = video.variants.findIndex(function (variant) {
                 const resolution = String(variant.resolution || "");
                 const match = resolution.match(/x(\d+)$/);
