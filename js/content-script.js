@@ -881,6 +881,7 @@
         }
 
         const send = document.createElement("button");
+        send.id = "catcatch-nas-send-button";
         const renderableVideos = getNasRenderableVideos();
         const sceneStreamsReady = getNasSceneVideos().length;
         const waitingForPlan = nasIsHotMoviesDescriptionPage && !nasMovieExtractionPlan;
@@ -1774,6 +1775,8 @@
 
         if (Message.Message === "nasSceneDiagnostic") {
             const stage = String(Message.stage || "Diagnostic réseau");
+            const sendButton = nasPanel?.querySelector("#catcatch-nas-send-button");
+            if (sendButton?.disabled) { sendButton.textContent = stage; }
             nasAddTrace(stage, {
                 frame: Message.frameId,
                 scène: Message.sceneId,
