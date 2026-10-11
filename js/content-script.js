@@ -864,17 +864,11 @@
         header.style.alignItems = "center";
 
         const heading = document.createElement("div");
-        const sceneCount = Array.isArray(nasMovieExtractionPlan?.scenes) &&
-            nasMovieExtractionPlan.scenes.length > 0
-            ? nasMovieExtractionPlan.scenes.length
-            : null;
-        heading.textContent = sceneCount !== null
-            ? "Vidéos détectées • " + sceneCount + " scène" + (sceneCount > 1 ? "s" : "")
-            : nasMovieExtractionLoading
-                ? "Vidéos détectées • recherche des scènes…"
-                : nasMovieExtractionError
-                    ? "Vidéos détectées • plan scènes indisponible"
-                    : "Vidéos détectées";
+        heading.textContent = nasMovieExtractionLoading
+            ? "Vidéos détectées • recherche des scènes…"
+            : nasMovieExtractionError
+                ? "Vidéos détectées • plan scènes indisponible"
+                : "Vidéos détectées";
         heading.style.fontSize = "18px";
         heading.style.fontWeight = "bold";
 
@@ -915,6 +909,10 @@
 
             send.disabled = true;
             send.textContent = "ENVOI…";
+            nasAddTrace("Envoi demandé", {
+                vidéos: getNasSelectedCount(),
+                scène: getNasSceneVideos().length > 0 ? "oui" : "non"
+            });
 
             let success = 0;
             let errors = 0;
