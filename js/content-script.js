@@ -1209,8 +1209,22 @@
             title.style.textOverflow = "ellipsis";
             title.style.fontSize = "12px";
 
+            const details = document.createElement("span");
+            details.style.fontSize = "11px";
+            details.style.color = "#bbb";
+            details.style.whiteSpace = "normal";
+            const scene = video.scene || nasSceneById(video.sceneId) || {};
+            const localNames = Array.isArray(scene.localActressNames) ? scene.localActressNames : [];
+            const duration = String(scene.durationText || "").trim() || nasFormatDuration(video.duration);
+            details.textContent = [localNames.join(", "), duration].filter(Boolean).join(" · ");
+            const description = document.createElement("span");
+            description.style.display = "flex";
+            description.style.flexDirection = "column";
+            description.style.minWidth = "0";
+            description.appendChild(title);
+            if (details.textContent) description.appendChild(details);
             label.appendChild(checkbox);
-            label.appendChild(title);
+            label.appendChild(description);
             row.appendChild(label);
 
             const quality = document.createElement("select");
